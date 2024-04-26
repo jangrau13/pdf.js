@@ -412,6 +412,8 @@ class AnnotationEditor {
   }
 
   addToAnnotationStorage() {
+    // here I need to add the information to the annotation I want to
+    console.log("I adding something to the Annotation Storage", this);
     this._uiManager.addToAnnotationStorage(this);
   }
 

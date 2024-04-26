@@ -128,6 +128,31 @@ class EditorToolbar {
     this.#buttons.prepend(button, this.#divider);
   }
 
+  addJanEditorTool() {
+    // I am in the right toolbar, but only for editing
+    const button = document.createElement("button");
+    button.className = "janTester";
+    button.tabIndex = 0;
+    button.setAttribute("data-l10n-id", `pdfjs-editor-janTester-button`);
+    const img = document.createElement("img");
+    img.src = "images/annotation-key.svg"; // Path to the SVG file
+    img.style.width = "50%"; // Set width to 50% of its original size
+    img.style.height = "auto"; // Maintain the aspect ratio
+    img.alt = "Annotation Note"; // Alternative text for accessibility
+    button.append(img);
+    this.#addListenersToElement(button);
+    button.addEventListener("click", e => {
+      const userInput = prompt(
+        "Thanks for editing me, do you have additional information I don't have yet?"
+      );
+      if (userInput !== null) {
+        // Check if the user clicked "OK"
+        console.log("user input: ", userInput);
+      }
+    });
+    this.#buttons.append(button);
+  }
+
   remove() {
     this.#toolbar.remove();
     this.#colorPicker?.destroy();
@@ -209,6 +234,11 @@ class HighlightToolbar {
     span.setAttribute("data-l10n-id", "pdfjs-highlight-floating-button-label");
     button.addEventListener("contextmenu", noContextMenu);
     button.addEventListener("click", () => {
+      const userInput = prompt("Please give me your knowledge:");
+      if (userInput !== null) {
+        // Check if the user clicked "OK"
+        console.log("user input: ", userInput);
+      }
       this.#uiManager.highlightSelection("floating_button");
     });
     this.#buttons.append(button);

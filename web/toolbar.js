@@ -131,6 +131,9 @@ class Toolbar {
     eventBus._on("showannotationeditorui", ({ mode }) => {
       switch (mode) {
         case AnnotationEditorType.HIGHLIGHT:
+          console.log(
+            "I get triggered as soon as the icon that appears after a highlight has been done"
+          );
           options.editorHighlightButton.click();
           break;
       }

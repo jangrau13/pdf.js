@@ -611,6 +611,8 @@ class AnnotationElement {
     const { container, data } = this;
     container.setAttribute("aria-haspopup", "dialog");
 
+    console.log("popup created", container);
+
     const popup = new PopupAnnotationElement({
       data: {
         color: data.color,

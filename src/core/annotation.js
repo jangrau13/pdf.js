@@ -322,7 +322,13 @@ class AnnotationFactory {
     return imagePromises;
   }
 
-  static async saveNewAnnotations(evaluator, task, annotations, imagePromises) {
+  static async saveNewAnnotations(
+    evaluator,
+    task,
+    annotations,
+    imagePromises,
+    jan_addon = false
+  ) {
     const xref = evaluator.xref;
     let baseFontRef;
     const dependencies = [];
@@ -361,12 +367,19 @@ class AnnotationFactory {
               HighlightAnnotation.createNewAnnotation(
                 xref,
                 annotation,
-                dependencies
+                dependencies,
+                // added by Jan
+                { marks_on_page: jan_addon }
               )
             );
           } else {
             promises.push(
-              InkAnnotation.createNewAnnotation(xref, annotation, dependencies)
+              InkAnnotation.createNewAnnotation(
+                xref,
+                annotation,
+                dependencies, // added by Jan as well
+                { marks_on_page: jan_addon }
+              )
             );
           }
           break;
@@ -1119,20 +1132,11 @@ class Annotation {
     renderForms,
     annotationStorage
   ) {
-    const { hasOwnCanvas, id, rect } = this.data;
+    const data = this.data;
     let appearance = this.appearance;
     const isUsingOwnCanvas = !!(
-      hasOwnCanvas && intent & RenderingIntentFlag.DISPLAY
+      this.data.hasOwnCanvas && intent & RenderingIntentFlag.DISPLAY
     );
-    if (isUsingOwnCanvas && (rect[0] === rect[2] || rect[1] === rect[3])) {
-      // Empty annotation, don't draw anything.
-      this.data.hasOwnCanvas = false;
-      return {
-        opList: new OperatorList(),
-        separateForm: false,
-        separateCanvas: false,
-      };
-    }
     if (!appearance) {
       if (!isUsingOwnCanvas) {
         return {
@@ -1152,7 +1156,7 @@ class Annotation {
     );
     const bbox = appearanceDict.getArray("BBox") || [0, 0, 1, 1];
     const matrix = appearanceDict.getArray("Matrix") || [1, 0, 0, 1, 0, 0];
-    const transform = getTransformMatrix(rect, bbox, matrix);
+    const transform = getTransformMatrix(data.rect, bbox, matrix);
 
     const opList = new OperatorList();
 
@@ -1168,8 +1172,8 @@ class Annotation {
     }
 
     opList.addOp(OPS.beginAnnotation, [
-      id,
-      rect,
+      data.id,
+      data.rect,
       transform,
       matrix,
       isUsingOwnCanvas,
@@ -1483,9 +1487,9 @@ class AnnotationBorderStyle {
     // We validate the dash array, but we do not use it because CSS does not
     // allow us to change spacing of dashes. For more information, visit
     // http://www.w3.org/TR/css3-background/#the-border-style.
-    if (Array.isArray(dashArray)) {
-      // The PDF specification states that elements in the dash array, if
-      // present, must be non-negative numbers and must not all equal zero.
+    if (Array.isArray(dashArray) && dashArray.length > 0) {
+      // According to the PDF specification: the elements in `dashArray`
+      // shall be numbers that are nonnegative and not all equal to zero.
       let isValid = true;
       let allZeros = true;
       for (const element of dashArray) {
@@ -1497,7 +1501,7 @@ class AnnotationBorderStyle {
           allZeros = false;
         }
       }
-      if (dashArray.length === 0 || (isValid && !allZeros)) {
+      if (isValid && !allZeros) {
         this.dashArray = dashArray;
 
         if (forceStyle) {
@@ -1720,11 +1724,20 @@ class MarkupAnnotation extends Annotation {
 
     if (ap) {
       const apRef = xref.getNewTemporaryRef();
-      annotationDict = this.createNewDict(annotation, xref, { apRef });
+      // if else added by Jan
+      annotationDict = params.marks_on_page
+        ? this.createNewDict(annotation, xref, {
+            apRef,
+            marks_on_page: params.marks_on_page,
+          })
+        : this.createNewDict(annotation, xref, { apRef });
       await writeObject(apRef, ap, buffer, xref);
       dependencies.push({ ref: apRef, data: buffer.join("") });
     } else {
-      annotationDict = this.createNewDict(annotation, xref, {});
+      // if else case by Jan
+      annotationDict = params.marks_on_page
+        ? this.createNewDict(annotation, xref, { params })
+        : this.createNewDict(annotation, xref, {});
     }
     if (Number.isInteger(annotation.parentTreeId)) {
       annotationDict.set("StructParent", annotation.parentTreeId);
@@ -4545,11 +4558,15 @@ class InkAnnotation extends MarkupAnnotation {
 class HighlightAnnotation extends MarkupAnnotation {
   constructor(params) {
     super(params);
+    this.janParam = params;
+    console.log("creating new Highlight Annotaton");
+    console.log(this.janParam);
 
     const { dict, xref } = params;
     this.data.annotationType = AnnotationType.HIGHLIGHT;
 
     const quadPoints = (this.data.quadPoints = getQuadPoints(dict, null));
+    console.log("quadPoints", quadPoints);
     if (quadPoints) {
       const resources = this.appearance?.dict.get("Resources");
 
@@ -4587,7 +4604,7 @@ class HighlightAnnotation extends MarkupAnnotation {
     }
   }
 
-  static createNewDict(annotation, xref, { apRef, ap }) {
+  static createNewDict(annotation, xref, { apRef, ap, marks_on_page }) {
     const { color, opacity, rect, rotation, user, quadPoints } = annotation;
     const highlight = new Dict(xref);
     highlight.set("Type", Name.get("Annot"));
@@ -4598,6 +4615,26 @@ class HighlightAnnotation extends MarkupAnnotation {
     highlight.set("Border", [0, 0, 0]);
     highlight.set("Rotate", rotation);
     highlight.set("QuadPoints", quadPoints);
+    // Read from the hidden element
+    let closestMark = null;
+    if (marks_on_page) {
+      closestMark = wiserFindClosestMark(marks_on_page, annotation);
+    }
+    const baseURI = "http://purl.org/wiser#myPDF";
+    const innerText = closestMark.content;
+
+    // Use the innerText and baseURI as needed, here embedding into RDFA string
+    highlight.set(
+      "Contents",
+      `
+    <div vocab="http://purl.org/dc/terms/" resource="${baseURI}">
+      <p>Excerpt: <span property="description">${innerText}</span></p>
+      <p>Date: <span property="date">${new Date().toISOString().slice(0, 10)}</span></p>
+    </div>
+  `
+    );
+
+    console.log("Contents Set with RDFA Data");
 
     // Color.
     highlight.set(
@@ -4674,6 +4711,40 @@ class HighlightAnnotation extends MarkupAnnotation {
 
     return ap;
   }
+}
+
+function wiserFindClosestMark(marks, annotation) {
+  const getCenter = ({ topLeft, topRight, bottomLeft, bottomRight }) => ({
+    x: (topLeft.x + topRight.x + bottomLeft.x + bottomRight.x) / 4,
+    y: (topLeft.y + topRight.y + bottomLeft.y + bottomRight.y) / 4,
+  });
+
+  const annotCenter = getCenter({
+    topLeft: { x: annotation.quadPoints[4], y: annotation.quadPoints[5] },
+    topRight: { x: annotation.quadPoints[6], y: annotation.quadPoints[7] },
+    bottomLeft: { x: annotation.quadPoints[0], y: annotation.quadPoints[1] },
+    bottomRight: { x: annotation.quadPoints[2], y: annotation.quadPoints[3] },
+  });
+
+  let closestMark = null;
+  let minDistance = Infinity;
+
+  marks.forEach(mark => {
+    if (mark.pageNumber === annotation.pageIndex + 1) {
+      const markRect = mark.exactLocation.quadPointsLite;
+      const markCenter = getCenter(markRect);
+      const distance = Math.sqrt(
+        Math.pow(markCenter.x - annotCenter.x, 2) +
+          Math.pow(markCenter.y - annotCenter.y, 2)
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestMark = mark;
+      }
+    }
+  });
+  return closestMark;
 }
 
 class UnderlineAnnotation extends MarkupAnnotation {
