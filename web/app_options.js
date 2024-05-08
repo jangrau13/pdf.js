@@ -141,7 +141,9 @@ const defaultOptions = {
     // in Firefox release, but it has to be temporary.
     // TODO: remove it when unnecessary.
     /** @type {boolean} */
-    value: typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING"),
+    // change Jan value: typeof PDFJSDev === "undefined" 
+    // || PDFJSDev.test("TESTING"),
+    value: true,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
   },
   enableHighlightFloatingButton: {
@@ -149,7 +151,9 @@ const defaultOptions = {
     // in Firefox release, but it has to be temporary.
     // TODO: remove it when unnecessary.
     /** @type {boolean} */
-    value: typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING"),
+    // change Jan value: typeof PDFJSDev === "undefined" 
+    // || PDFJSDev.test("TESTING"),
+    value: true,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
   },
   enableML: {

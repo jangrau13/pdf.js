@@ -145,11 +145,11 @@ function safeSpawnSync(command, parameters, options = {}) {
   if (result.status !== 0) {
     console.log(
       'Error: command "' +
-        command +
-        '" with parameters "' +
-        parameters +
-        '" exited with code ' +
-        result.status
+      command +
+      '" with parameters "' +
+      parameters +
+      '" exited with code ' +
+      result.status
     );
     process.exit(result.status);
   }
@@ -302,9 +302,8 @@ function createWebpackConfig(
   const skipBabel = bundleDefines.SKIP_BABEL;
 
   const babelExcludeRegExp = [
-    // `core-js`, see https://github.com/zloirock/core-js/issues/514,
-    // should be excluded from processing.
     /node_modules[\\/]core-js/,
+    /\.json$/ // Exclude JSON files from being processed by Babel
   ];
 
   const babelPresets = skipBabel
@@ -341,24 +340,24 @@ function createWebpackConfig(
       minimizer: !isMinified
         ? undefined
         : [
-            new TerserPlugin({
-              extractComments: false,
-              parallel: false,
-              terserOptions: {
-                compress: {
-                  // V8 chokes on very long sequences, work around that.
-                  sequences: false,
-                },
-                mangle: {
-                  // Ensure that the `tweakWebpackOutput` function works.
-                  reserved: ["__webpack_exports__"],
-                },
-                keep_classnames: true,
-                keep_fnames: true,
-                module: isModule,
+          new TerserPlugin({
+            extractComments: false,
+            parallel: false,
+            terserOptions: {
+              compress: {
+                // V8 chokes on very long sequences, work around that.
+                sequences: false,
               },
-            }),
-          ],
+              mangle: {
+                // Ensure that the `tweakWebpackOutput` function works.
+                reserved: ["__webpack_exports__"],
+              },
+              keep_classnames: true,
+              keep_fnames: true,
+              module: isModule,
+            },
+          }),
+        ],
     },
     experiments,
     output,
@@ -423,7 +422,7 @@ function checkChromePreferencesFile(chromePrefsPath, webPrefs) {
       ret = false;
       console.log(
         `Warning: not the same values (for "${key}"): ` +
-          `${chromePrefs.properties[key].default} !== ${value}`
+        `${chromePrefs.properties[key].default} !== ${value}`
       );
     }
   }
@@ -435,8 +434,8 @@ function checkChromePreferencesFile(chromePrefsPath, webPrefs) {
       ret = false;
       console.log(
         `Warning: ${chromePrefsPath} contains an unrecognized pref: ${key}. ` +
-          `Remove it, or prepend "DEPRECATED. " and add migration logic to ` +
-          `extensions/chromium/options/migration.js and web/chromecom.js.`
+        `Remove it, or prepend "DEPRECATED. " and add migration logic to ` +
+        `extensions/chromium/options/migration.js and web/chromecom.js.`
       );
     }
   }
@@ -1066,6 +1065,11 @@ function buildGeneric(defines, dir) {
   ]);
 }
 
+gulp.task("copy-html", function () {
+  return gulp.src('web/test.html')  // Specify the source file
+    .pipe(gulp.dest('build/generic/web'));  // Specify the destination folder
+});
+
 // Builds the generic production viewer that is only compatible with up-to-date
 // HTML5 browsers, which implement modern ECMAScript features.
 gulp.task(
@@ -1089,9 +1093,12 @@ gulp.task(
       const defines = { ...DEFINES, GENERIC: true };
 
       return buildGeneric(defines, GENERIC_DIR);
-    }
+    },
+    "copy-html"
   )
 );
+
+
 
 // Builds the generic production viewer that should be compatible with most
 // older HTML5 browsers.
@@ -1407,6 +1414,7 @@ gulp.task(
   )
 );
 
+
 gulp.task(
   "chromium",
   gulp.series(
@@ -1540,11 +1548,11 @@ function buildLibHelper(bundleDefines, inputStream, outputDir) {
       presets: skipBabel
         ? undefined
         : [
-            [
-              "@babel/preset-env",
-              { ...BABEL_PRESET_ENV_OPTS, loose: false, modules: false },
-            ],
+          [
+            "@babel/preset-env",
+            { ...BABEL_PRESET_ENV_OPTS, loose: false, modules: false },
           ],
+        ],
       plugins: [[babelPluginPDFJSPreprocessor, ctx]],
       targets: BABEL_TARGETS,
     }).code;
@@ -2396,8 +2404,8 @@ gulp.task(
             .on("end", function () {
               console.log(
                 "Result diff can be found at " +
-                  BUILD_DIR +
-                  MOZCENTRAL_DIFF_FILE
+                BUILD_DIR +
+                MOZCENTRAL_DIFF_FILE
               );
               done();
             });

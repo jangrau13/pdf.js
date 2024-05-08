@@ -17,6 +17,8 @@ import { RenderingStates, ScrollMode, SpreadMode } from "./ui_utils.js";
 import { AppOptions } from "./app_options.js";
 import { LinkTarget } from "./pdf_link_service.js";
 import { PDFViewerApplication } from "./app.js";
+import { RdfaParser } from "rdfa-streaming-parser";
+
 
 /* eslint-disable-next-line no-unused-vars */
 const pdfjsVersion =
@@ -215,7 +217,17 @@ document.blockUnblockOnload?.(true);
 if (
   document.readyState === "interactive" ||
   document.readyState === "complete"
-) {
+) 
+{
+  //add by Jan
+  const myParser = new RdfaParser({
+    baseIRI: window.location.href,
+    contentType: "text/html",
+  });
+
+  window.myParser = myParser;
+
+  // done adding
   webViewerLoad();
 } else {
   document.addEventListener("DOMContentLoaded", webViewerLoad, true);

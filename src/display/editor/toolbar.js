@@ -47,9 +47,8 @@ class EditorToolbar {
           ? 1 - position[0]
           : position[0];
       style.insetInlineEnd = `${100 * x}%`;
-      style.top = `calc(${
-        100 * position[1]
-      }% + var(--editor-toolbar-vert-offset))`;
+      style.top = `calc(${100 * position[1]
+        }% + var(--editor-toolbar-vert-offset))`;
     }
 
     this.#addDeleteButton();
@@ -147,7 +146,7 @@ class EditorToolbar {
       );
       if (userInput !== null) {
         // Check if the user clicked "OK"
-        console.log("user input: ", userInput);
+        console.log("user input edit: ", userInput);
       }
     });
     this.#buttons.append(button);
@@ -233,16 +232,63 @@ class HighlightToolbar {
     span.className = "visuallyHidden";
     span.setAttribute("data-l10n-id", "pdfjs-highlight-floating-button-label");
     button.addEventListener("contextmenu", noContextMenu);
+
+    // Create dialog element
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("id", "userInputDialog");
+    dialog.style.width = '300px'; // Set the width of the dialog
+    dialog.style.border = '1px solid #ccc'; // Set the border of the dialog
+    dialog.style.borderRadius = '10px'; // Rounded corners for the dialog
+    dialog.style.padding = '20px'; // Padding inside the dialog
+    dialog.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)'; // Drop shadow for 3D effect
+    dialog.style.backgroundColor = '#fff'; // Background color of the dialog
+    dialog.innerHTML = `
+        <form method="dialog">
+            <h1 style="margin-bottom: 20px; color: black;" data-l10n-id="pdfjs-editor-janTester-title">Knowledge Annotator</h1>
+            <label for="input" style="display: block; margin-bottom: 10px; color: black;" data-l10n-id="pdfjs-editor-janTester-label">Please give me your knowledge:</label>
+            <input type="text" id="input" name="userinput" style="width: 100%; margin-bottom: 20px;">
+            <menu style="display: flex; justify-content: space-between;">
+                <button value="cancel" style="flex: 1; margin-right: 10px;">Cancel</button>
+                <button id="confirmBtn" value="default" style="flex: 1;">OK</button>
+            </menu>
+        </form>`;
+
+    document.body.appendChild(dialog); // Append dialog to body
+
     button.addEventListener("click", () => {
-      const userInput = prompt("Please give me your knowledge:");
-      if (userInput !== null) {
-        // Check if the user clicked "OK"
-        console.log("user input: ", userInput);
-      }
-      this.#uiManager.highlightSelection("floating_button");
+      // Save the current selection before opening the dialog
+      const selection = window.getSelection();
+      const selectedRange = selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+
+      dialog.showModal(); // Display the modal dialog
+
+      dialog.addEventListener('close', () => {
+        const userInput = document.getElementById("input").value ? document.getElementById("input").value : null;
+        console.log("User input: ", userInput);
+        if (userInput !== null) {
+          // Store the user input somewhere for further use
+          document.getElementById('rdfa-tmp-storage').setAttribute('data-user-input', userInput);
+          document.getElementById("input").value = ""; // Clear the input field
+        }
+
+        // Check if there was a saved selection
+        if (selectedRange) {
+          // Restore the selection
+          if (selection.rangeCount > 0) selection.removeAllRanges();
+          selection.addRange(selectedRange);
+        }
+
+        // Execute the highlight action if needed
+        this.#uiManager.highlightSelection("floating_button");
+
+        // Optionally, remove the dialog listener if not needed anymore
+        dialog.removeEventListener('close', this);
+      }, { once: true }); // Ensures the listener is removed automatically after execution
     });
+
     this.#buttons.append(button);
   }
+
 }
 
 export { EditorToolbar, HighlightToolbar };
