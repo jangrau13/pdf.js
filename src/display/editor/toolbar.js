@@ -132,20 +132,31 @@ class EditorToolbar {
     const button = document.createElement("button");
     button.className = "janTester";
     button.tabIndex = 0;
-    button.setAttribute("data-l10n-id", `pdfjs-editor-janTester-button`);
+    button.setAttribute("data-l10n-id", "pdfjs-editor-janTester-button");
+
+    const svgData = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="m3.99 16.854-1.314 3.504a.75.75 0 0 0 .966.965l3.503-1.314a3 3 0 0 0 1.068-.687L18.36 9.175s-.354-1.061-1.414-2.122c-1.06-1.06-2.122-1.414-2.122-1.414L4.677 15.786a3 3 0 0 0-.687 1.068zm12.249-12.63 1.383-1.383c.248-.248.579-.406.925-.348.487.08 1.232.322 1.934 1.025.703.703.945 1.447 1.025 1.934.058.346-.1.677-.348.925L19.774 7.76s-.353-1.06-1.414-2.12c-1.06-1.062-2.121-1.415-2.121-1.415z" fill="currentColor"/>
+        </svg>
+    `;
+    const encodedSvg = encodeURIComponent(svgData);
     const img = document.createElement("img");
-    img.src = "images/annotation-key.svg"; // Path to the SVG file
-    img.style.width = "50%"; // Set width to 50% of its original size
-    img.style.height = "auto"; // Maintain the aspect ratio
-    img.alt = "Annotation Note"; // Alternative text for accessibility
+    img.src = `data:image/svg+xml;charset=utf-8,${encodedSvg}`;
+    img.alt = "Edit"; // Alternative text for accessibility
+
+    // Applying theme-dependent CSS directly
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    function applyTheme(mediaQuery) {
+      img.style.filter = mediaQuery.matches ? 'invert(100%)' : 'invert(0%)';
+    }
+    applyTheme(mediaQuery); // Apply based on current theme
+    mediaQuery.addListener(applyTheme); // Add listener to re-apply on theme changes
+
     button.append(img);
     this.#addListenersToElement(button);
     button.addEventListener("click", e => {
-      const userInput = prompt(
-        "Thanks for editing me, do you have additional information I don't have yet?"
-      );
+      const userInput = prompt("Thanks for editing me, do you have additional information I don't have yet?");
       if (userInput !== null) {
-        // Check if the user clicked "OK"
         console.log("user input edit: ", userInput);
       }
     });

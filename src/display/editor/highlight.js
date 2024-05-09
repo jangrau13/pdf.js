@@ -386,6 +386,7 @@ class HighlightEditor extends AnnotationEditor {
       this.#colorPicker = new ColorPicker({ editor: this });
       toolbar.addColorPicker(this.#colorPicker);
       toolbar.addJanEditorTool();
+      toolbar.addJanEditorTool();
     }
     return toolbar;
   }
