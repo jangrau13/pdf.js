@@ -1069,47 +1069,47 @@ function buildGeneric(defines, dir) {
 // Individual tasks defined as asynchronous functions
 async function copyHTML() {
     return gulp.src(['web/viewer_fragment.html', 'web/index.html'])
-        .pipe(gulp.dest('../assets'));
+        .pipe(gulp.dest('../public'));
 }
 
 async function copyBuildJS() {
     return gulp.src(['build/generic/build/pdf.mjs', 'build/generic/build/pdf.worker.mjs'])
-        .pipe(gulp.dest('../assets/js'));
+        .pipe(gulp.dest('../pdf_api/js'));
 }
 
 async function copyViewerJS() {
     return gulp.src(['build/generic/web/viewer.mjs'])
-        .pipe(gulp.dest('../assets/js'));
+        .pipe(gulp.dest('../pdf_api/js'));
 }
 
 async function copyCSS() {
     return gulp.src(['build/generic/web/viewer.css'])
-        .pipe(gulp.dest('../assets/css'));
+        .pipe(gulp.dest('../pdf_api/css'));
 }
 
 async function copyCMaps() {
     return gulp.src(['build/generic/web/cmaps/**/*'])
-        .pipe(gulp.dest('../assets/cmaps'));
+        .pipe(gulp.dest('../pdf_api/cmaps'));
 }
 
 async function copyImages() {
     return gulp.src(['build/generic/web/images/**/*'])
-        .pipe(gulp.dest('../assets/css/images'));
+        .pipe(gulp.dest('../pdf_api/css/images'));
 }
 
 async function copyStandardFonts() {
     return gulp.src(['build/generic/web/standard_fonts/**/*'])
-        .pipe(gulp.dest('../assets/standard_fonts'));
+        .pipe(gulp.dest('../pdf_api/standard_fonts'));
 }
 
 async function copyLocals() {
     return gulp.src(['build/generic/web/locale/**/*'])
-        .pipe(gulp.dest('../assets/locale'));
+        .pipe(gulp.dest('../pdf_api/locale'));
 }
 
 async function copyPDF() {
     return gulp.src(['web/compressed.tracemonkey-pldi-09.pdf'])
-        .pipe(gulp.dest('../assets/pdf'));
+        .pipe(gulp.dest('../public/pdf'));
 }
 
 // Define a public task that runs both tasks sequentially using async/await

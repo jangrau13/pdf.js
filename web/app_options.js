@@ -374,7 +374,7 @@ const defaultOptions = {
         ? "../src/pdf.worker.js"
         : PDFJSDev.test("MOZCENTRAL")
           ? "resource://pdf.js/build/pdf.worker.mjs"
-          : "js/pdf.worker.mjs",
+          : "pdf_api/js/pdf.worker.mjs",
     kind: OptionKind.WORKER,
   },
 };
