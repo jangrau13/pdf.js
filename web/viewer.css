@@ -215,12 +215,12 @@
 }
 
 html,
-body {
+#janpdf {
   height: 100%;
   width: 100%;
 }
 
-body {
+#janpdf {
   background-color: var(--body-bg-color);
   scrollbar-color: var(--scrollbar-color) var(--scrollbar-bg-color);
 }
@@ -238,6 +238,10 @@ body {
   overflow: hidden;
   cursor: none;
   user-select: none;
+}
+
+#janpdf #viewerContainer{
+  height: 90vh;
 }
 
 .pdfPresentationMode:fullscreen section:not([data-internal-link]) {
@@ -299,6 +303,10 @@ body {
 #viewerContainer {
   overflow: auto;
   position: absolute;
+  /* Copyright 2014 Mozilla Foundation
+   * added by Jan
+   */
+  height: 100%;
   inset: 32px 0 0;
   outline: none;
 }
