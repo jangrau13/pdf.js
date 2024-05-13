@@ -1069,7 +1069,7 @@ function buildGeneric(defines, dir) {
 // Individual tasks defined as asynchronous functions
 async function copyHTML() {
     return gulp.src(['web/viewer_fragment.html', 'web/index.html'])
-        .pipe(gulp.dest('../public'));
+        .pipe(gulp.dest('../templates'));
 }
 
 async function copyBuildJS() {

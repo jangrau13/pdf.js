@@ -110,8 +110,8 @@ class ColorPicker {
   #getDropdownRoot() {
     const div = document.createElement("div");
     div.addEventListener("contextmenu", noContextMenu);
-    div.className = "dropdown";
-    div.role = "listbox";
+    //div.className = "dropdown";
+    //div.role = "listbox";
     div.setAttribute("aria-multiselectable", false);
     div.setAttribute("aria-orientation", "vertical");
     div.setAttribute("data-l10n-id", "pdfjs-editor-colorpicker-dropdown");
@@ -124,8 +124,9 @@ class ColorPicker {
       button.setAttribute("data-l10n-id", `pdfjs-editor-colorpicker-${name}`);
       const swatch = document.createElement("span");
       button.append(swatch);
-      swatch.className = "swatch";
+      //swatch.className = "swatch";
       swatch.style.backgroundColor = color;
+      swatch.textContent = name
       button.setAttribute("aria-selected", color === this.#defaultColor);
       button.addEventListener("click", this.#colorSelect.bind(this, color));
       div.append(button);
@@ -138,6 +139,10 @@ class ColorPicker {
 
   #colorSelect(color, event) {
     event.stopPropagation();
+    console.log("recipe for changing color")
+    console.log("source", this)
+    console.log("type", this.#type)
+    console.log("value", color)
     this.#eventBus.dispatch("switchannotationeditorparams", {
       source: this,
       type: this.#type,

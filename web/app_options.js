@@ -374,7 +374,7 @@ const defaultOptions = {
         ? "../src/pdf.worker.js"
         : PDFJSDev.test("MOZCENTRAL")
           ? "resource://pdf.js/build/pdf.worker.mjs"
-          : "pdf_api/js/pdf.worker.mjs",
+          : "/pdf_api/js/pdf.worker.mjs",
     kind: OptionKind.WORKER,
   },
 };
@@ -384,7 +384,7 @@ if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
     value:
       typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")
         ? ""
-        : "pdf/compressed.tracemonkey-pldi-09.pdf",
+        : "",
     kind: OptionKind.VIEWER,
   };
   defaultOptions.sandboxBundleSrc = {

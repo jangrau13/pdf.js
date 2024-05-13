@@ -13,247 +13,250 @@
  * limitations under the License.
  */
 
-import { noContextMenu } from "../display_utils.js";
+import {noContextMenu} from "../display_utils.js";
 
 class EditorToolbar {
-  #toolbar = null;
+    #toolbar = null;
 
-  #colorPicker = null;
+    #colorPicker = null;
 
-  #editor;
+    #editor;
 
-  #buttons = null;
+    #buttons = null;
 
-  constructor(editor) {
-    this.#editor = editor;
-  }
-
-  render() {
-    const editToolbar = (this.#toolbar = document.createElement("div"));
-    editToolbar.className = "editToolbar";
-    editToolbar.setAttribute("role", "toolbar");
-    editToolbar.addEventListener("contextmenu", noContextMenu);
-    editToolbar.addEventListener("pointerdown", EditorToolbar.#pointerDown);
-
-    const buttons = (this.#buttons = document.createElement("div"));
-    buttons.className = "buttons";
-    editToolbar.append(buttons);
-
-    const position = this.#editor.toolbarPosition;
-    if (position) {
-      const { style } = editToolbar;
-      const x =
-        this.#editor._uiManager.direction === "ltr"
-          ? 1 - position[0]
-          : position[0];
-      style.insetInlineEnd = `${100 * x}%`;
-      style.top = `calc(${100 * position[1]
-        }% + var(--editor-toolbar-vert-offset))`;
+    constructor(editor) {
+        this.#editor = editor;
     }
 
-    this.#addDeleteButton();
+    render() {
+        const editToolbar = (this.#toolbar = document.createElement("div"));
+        editToolbar.className = "editToolbar";
+        editToolbar.setAttribute("role", "toolbar");
+        editToolbar.addEventListener("contextmenu", noContextMenu);
+        editToolbar.addEventListener("pointerdown", EditorToolbar.#pointerDown);
 
-    return editToolbar;
-  }
+        const buttons = (this.#buttons = document.createElement("div"));
+        buttons.className = "buttons";
+        editToolbar.append(buttons);
 
-  static #pointerDown(e) {
-    e.stopPropagation();
-  }
+        const position = this.#editor.toolbarPosition;
+        if (position) {
+            const {style} = editToolbar;
+            const x =
+                this.#editor._uiManager.direction === "ltr"
+                    ? 1 - position[0]
+                    : position[0];
+            style.insetInlineEnd = `${100 * x}%`;
+            style.top = `calc(${100 * position[1]
+            }% + var(--editor-toolbar-vert-offset))`;
+        }
 
-  #focusIn(e) {
-    this.#editor._focusEventsAllowed = false;
-    e.preventDefault();
-    e.stopPropagation();
-  }
+        this.#addDeleteButton();
 
-  #focusOut(e) {
-    this.#editor._focusEventsAllowed = true;
-    e.preventDefault();
-    e.stopPropagation();
-  }
+        return editToolbar;
+    }
 
-  #addListenersToElement(element) {
-    // If we're clicking on a button with the keyboard or with
-    // the mouse, we don't want to trigger any focus events on
-    // the editor.
-    element.addEventListener("focusin", this.#focusIn.bind(this), {
-      capture: true,
-    });
-    element.addEventListener("focusout", this.#focusOut.bind(this), {
-      capture: true,
-    });
-    element.addEventListener("contextmenu", noContextMenu);
-  }
+    static #pointerDown(e) {
+        e.stopPropagation();
+    }
 
-  hide() {
-    this.#toolbar.classList.add("hidden");
-    this.#colorPicker?.hideDropdown();
-  }
+    #focusIn(e) {
+        this.#editor._focusEventsAllowed = false;
+        e.preventDefault();
+        e.stopPropagation();
+    }
 
-  show() {
-    this.#toolbar.classList.remove("hidden");
-  }
+    #focusOut(e) {
+        this.#editor._focusEventsAllowed = true;
+        e.preventDefault();
+        e.stopPropagation();
+    }
 
-  #addDeleteButton() {
-    const button = document.createElement("button");
-    button.className = "delete";
-    button.tabIndex = 0;
-    button.setAttribute(
-      "data-l10n-id",
-      `pdfjs-editor-remove-${this.#editor.editorType}-button`
-    );
-    this.#addListenersToElement(button);
-    button.addEventListener("click", e => {
-      this.#editor._uiManager.delete();
-    });
-    this.#buttons.append(button);
-  }
+    #addListenersToElement(element) {
+        // If we're clicking on a button with the keyboard or with
+        // the mouse, we don't want to trigger any focus events on
+        // the editor.
+        element.addEventListener("focusin", this.#focusIn.bind(this), {
+            capture: true,
+        });
+        element.addEventListener("focusout", this.#focusOut.bind(this), {
+            capture: true,
+        });
+        element.addEventListener("contextmenu", noContextMenu);
+    }
 
-  get #divider() {
-    const divider = document.createElement("div");
-    divider.className = "divider";
-    return divider;
-  }
+    hide() {
+        this.#toolbar.classList.add("hidden");
+        this.#colorPicker?.hideDropdown();
+    }
 
-  addAltTextButton(button) {
-    this.#addListenersToElement(button);
-    this.#buttons.prepend(button, this.#divider);
-  }
+    show() {
+        this.#toolbar.classList.remove("hidden");
+    }
 
-  addColorPicker(colorPicker) {
-    this.#colorPicker = colorPicker;
-    const button = colorPicker.renderButton();
-    this.#addListenersToElement(button);
-    this.#buttons.prepend(button, this.#divider);
-  }
+    #addDeleteButton() {
+        const button = document.createElement("button");
+        button.className = "delete";
+        button.tabIndex = 0;
+        button.setAttribute(
+            "data-l10n-id",
+            `pdfjs-editor-remove-${this.#editor.editorType}-button`
+        );
+        this.#addListenersToElement(button);
+        button.addEventListener("click", e => {
+            this.#editor._uiManager.delete();
+        });
+        this.#buttons.append(button);
+    }
 
-  addJanEditorTool() {
-    // I am in the right toolbar, but only for editing
-    const button = document.createElement("button");
-    button.className = "janTester";
-    button.tabIndex = 0;
-    button.setAttribute("data-l10n-id", "pdfjs-editor-janTester-button");
+    get #divider() {
+        const divider = document.createElement("div");
+        divider.className = "divider";
+        return divider;
+    }
 
-    const svgData = `
+    addAltTextButton(button) {
+        this.#addListenersToElement(button);
+        this.#buttons.prepend(button, this.#divider);
+    }
+
+    addColorPicker(colorPicker) {
+        this.#colorPicker = colorPicker;
+        const button = colorPicker.renderButton();
+        this.#addListenersToElement(button);
+        this.#buttons.prepend(button, this.#divider);
+    }
+
+    addJanEditorTool() {
+        // I am in the right toolbar, but only for editing
+        const button = document.createElement("button");
+        button.className = "janTester";
+        button.tabIndex = 0;
+        button.setAttribute("data-l10n-id", "pdfjs-editor-janTester-button");
+
+        const svgData = `
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path fill-rule="evenodd" clip-rule="evenodd" d="m3.99 16.854-1.314 3.504a.75.75 0 0 0 .966.965l3.503-1.314a3 3 0 0 0 1.068-.687L18.36 9.175s-.354-1.061-1.414-2.122c-1.06-1.06-2.122-1.414-2.122-1.414L4.677 15.786a3 3 0 0 0-.687 1.068zm12.249-12.63 1.383-1.383c.248-.248.579-.406.925-.348.487.08 1.232.322 1.934 1.025.703.703.945 1.447 1.025 1.934.058.346-.1.677-.348.925L19.774 7.76s-.353-1.06-1.414-2.12c-1.06-1.062-2.121-1.415-2.121-1.415z" fill="currentColor"/>
         </svg>
     `;
-    const encodedSvg = encodeURIComponent(svgData);
-    const img = document.createElement("img");
-    img.src = `data:image/svg+xml;charset=utf-8,${encodedSvg}`;
-    img.alt = "Edit"; // Alternative text for accessibility
+        const encodedSvg = encodeURIComponent(svgData);
+        const img = document.createElement("img");
+        img.src = `data:image/svg+xml;charset=utf-8,${encodedSvg}`;
+        img.alt = "Edit"; // Alternative text for accessibility
 
-    // Applying theme-dependent CSS directly
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    function applyTheme(mediaQuery) {
-      img.style.filter = mediaQuery.matches ? 'invert(100%)' : 'invert(0%)';
+        // Applying theme-dependent CSS directly
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+        function applyTheme(mediaQuery) {
+            img.style.filter = mediaQuery.matches ? 'invert(100%)' : 'invert(0%)';
+        }
+
+        applyTheme(mediaQuery); // Apply based on current theme
+        mediaQuery.addListener(applyTheme); // Add listener to re-apply on theme changes
+
+        button.append(img);
+        this.#addListenersToElement(button);
+        button.addEventListener("click", e => {
+            const userInput = prompt("Thanks for editing me, do you have additional information I don't have yet?");
+            if (userInput !== null) {
+                console.log("user input edit: ", userInput);
+            }
+        });
+        this.#buttons.append(button);
+        this.#buttons.prepend(button, this.#divider);
     }
-    applyTheme(mediaQuery); // Apply based on current theme
-    mediaQuery.addListener(applyTheme); // Add listener to re-apply on theme changes
 
-    button.append(img);
-    this.#addListenersToElement(button);
-    button.addEventListener("click", e => {
-      const userInput = prompt("Thanks for editing me, do you have additional information I don't have yet?");
-      if (userInput !== null) {
-        console.log("user input edit: ", userInput);
-      }
-    });
-    this.#buttons.append(button);
-  }
-
-  remove() {
-    this.#toolbar.remove();
-    this.#colorPicker?.destroy();
-    this.#colorPicker = null;
-  }
+    remove() {
+        this.#toolbar.remove();
+        this.#colorPicker?.destroy();
+        this.#colorPicker = null;
+    }
 }
 
 class HighlightToolbar {
-  #buttons = null;
+    #buttons = null;
 
-  #toolbar = null;
+    #toolbar = null;
 
-  #uiManager;
+    #uiManager;
 
-  constructor(uiManager) {
-    this.#uiManager = uiManager;
-  }
-
-  #render() {
-    const editToolbar = (this.#toolbar = document.createElement("div"));
-    editToolbar.className = "editToolbar";
-    editToolbar.setAttribute("role", "toolbar");
-    editToolbar.addEventListener("contextmenu", noContextMenu);
-
-    const buttons = (this.#buttons = document.createElement("div"));
-    buttons.className = "buttons";
-    editToolbar.append(buttons);
-
-    this.#addHighlightButton();
-
-    return editToolbar;
-  }
-
-  #getLastPoint(boxes, isLTR) {
-    let lastY = 0;
-    let lastX = 0;
-    for (const box of boxes) {
-      const y = box.y + box.height;
-      if (y < lastY) {
-        continue;
-      }
-      const x = box.x + (isLTR ? box.width : 0);
-      if (y > lastY) {
-        lastX = x;
-        lastY = y;
-        continue;
-      }
-      if (isLTR) {
-        if (x > lastX) {
-          lastX = x;
-        }
-      } else if (x < lastX) {
-        lastX = x;
-      }
+    constructor(uiManager) {
+        this.#uiManager = uiManager;
     }
-    return [isLTR ? 1 - lastX : lastX, lastY];
-  }
 
-  show(parent, boxes, isLTR) {
-    const [x, y] = this.#getLastPoint(boxes, isLTR);
-    const { style } = (this.#toolbar ||= this.#render());
-    parent.append(this.#toolbar);
-    style.insetInlineEnd = `${100 * x}%`;
-    style.top = `calc(${100 * y}% + var(--editor-toolbar-vert-offset))`;
-  }
+    #render() {
+        const editToolbar = (this.#toolbar = document.createElement("div"));
+        editToolbar.className = "editToolbar";
+        editToolbar.setAttribute("role", "toolbar");
+        editToolbar.addEventListener("contextmenu", noContextMenu);
 
-  hide() {
-    this.#toolbar.remove();
-  }
+        const buttons = (this.#buttons = document.createElement("div"));
+        buttons.className = "buttons";
+        editToolbar.append(buttons);
 
-  #addHighlightButton() {
-    const button = document.createElement("button");
-    button.className = "highlightButton";
-    button.tabIndex = 0;
-    button.setAttribute("data-l10n-id", `pdfjs-highlight-floating-button1`);
-    const span = document.createElement("span");
-    button.append(span);
-    span.className = "visuallyHidden";
-    span.setAttribute("data-l10n-id", "pdfjs-highlight-floating-button-label");
-    button.addEventListener("contextmenu", noContextMenu);
+        this.#addHighlightButton();
 
-    // Create dialog element
-    const dialog = document.createElement("dialog");
-    dialog.setAttribute("id", "userInputDialog");
-    dialog.style.width = '300px'; // Set the width of the dialog
-    dialog.style.border = '1px solid #ccc'; // Set the border of the dialog
-    dialog.style.borderRadius = '10px'; // Rounded corners for the dialog
-    dialog.style.padding = '20px'; // Padding inside the dialog
-    dialog.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)'; // Drop shadow for 3D effect
-    dialog.style.backgroundColor = '#fff'; // Background color of the dialog
-    dialog.innerHTML = `
+        return editToolbar;
+    }
+
+    #getLastPoint(boxes, isLTR) {
+        let lastY = 0;
+        let lastX = 0;
+        for (const box of boxes) {
+            const y = box.y + box.height;
+            if (y < lastY) {
+                continue;
+            }
+            const x = box.x + (isLTR ? box.width : 0);
+            if (y > lastY) {
+                lastX = x;
+                lastY = y;
+                continue;
+            }
+            if (isLTR) {
+                if (x > lastX) {
+                    lastX = x;
+                }
+            } else if (x < lastX) {
+                lastX = x;
+            }
+        }
+        return [isLTR ? 1 - lastX : lastX, lastY];
+    }
+
+    show(parent, boxes, isLTR) {
+        const [x, y] = this.#getLastPoint(boxes, isLTR);
+        const {style} = (this.#toolbar ||= this.#render());
+        parent.append(this.#toolbar);
+        style.insetInlineEnd = `${100 * x}%`;
+        style.top = `calc(${100 * y}% + var(--editor-toolbar-vert-offset))`;
+    }
+
+    hide() {
+        this.#toolbar.remove();
+    }
+
+    #addHighlightButton() {
+        const button = document.createElement("button");
+        button.className = "highlightButton";
+        button.tabIndex = 0;
+        button.setAttribute("data-l10n-id", `pdfjs-highlight-floating-button1`);
+        const span = document.createElement("span");
+        button.append(span);
+        span.className = "visuallyHidden";
+        span.setAttribute("data-l10n-id", "pdfjs-highlight-floating-button-label");
+        button.addEventListener("contextmenu", noContextMenu);
+
+        // Create dialog element
+        const dialog = document.createElement("dialog");
+        dialog.setAttribute("id", "userInputDialog");
+        dialog.style.width = '300px'; // Set the width of the dialog
+        dialog.style.border = '1px solid #ccc'; // Set the border of the dialog
+        dialog.style.borderRadius = '10px'; // Rounded corners for the dialog
+        dialog.style.padding = '20px'; // Padding inside the dialog
+        dialog.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)'; // Drop shadow for 3D effect
+        dialog.style.backgroundColor = '#fff'; // Background color of the dialog
+        dialog.innerHTML = `
         <form method="dialog">
             <h1 style="margin-bottom: 20px; color: black;" data-l10n-id="pdfjs-editor-janTester-title">Knowledge Annotator</h1>
             <label for="input" style="display: block; margin-bottom: 10px; color: black;" data-l10n-id="pdfjs-editor-janTester-label">Please give me your knowledge:</label>
@@ -264,42 +267,49 @@ class HighlightToolbar {
             </menu>
         </form>`;
 
-    document.body.appendChild(dialog); // Append dialog to body
+        document.body.appendChild(dialog); // Append dialog to body
 
-    button.addEventListener("click", () => {
-      // Save the current selection before opening the dialog
-      const selection = window.getSelection();
-      const selectedRange = selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+        button.addEventListener("click", () => {
+            // Save the current selection before opening the dialog
+            const selection = window.getSelection();
+            const selectedRange = selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
 
-      dialog.showModal(); // Display the modal dialog
+            dialog.showModal(); // Display the modal dialog
 
-      dialog.addEventListener('close', () => {
-        const userInput = document.getElementById("input").value ? document.getElementById("input").value : null;
-        console.log("User input: ", userInput);
-        if (userInput !== null) {
-          // Store the user input somewhere for further use
-          document.getElementById('rdfa-tmp-storage').setAttribute('data-user-input', userInput);
-          document.getElementById("input").value = ""; // Clear the input field
-        }
+            dialog.addEventListener('close', () => {
+                const userInput = document.getElementById("input").value ? document.getElementById("input").value : null;
+                console.log("User input: ", userInput);
+                if (userInput !== null) {
+                    // Store the user input somewhere for further use
+                    document.getElementById('rdfa-tmp-storage').setAttribute('data-user-input', userInput);
+                    document.getElementById("input").value = ""; // Clear the input field
+                }
 
-        // Check if there was a saved selection
-        if (selectedRange) {
-          // Restore the selection
-          if (selection.rangeCount > 0) selection.removeAllRanges();
-          selection.addRange(selectedRange);
-        }
+                // Check if there was a saved selection
+                if (selectedRange) {
+                    // Restore the selection
+                    if (selection.rangeCount > 0) selection.removeAllRanges();
+                    selection.addRange(selectedRange);
+                }
 
-        // Execute the highlight action if needed
-        this.#uiManager.highlightSelection("floating_button");
+                // Execute the highlight action if needed
+                this.#uiManager.highlightSelection("floating_button");
 
-        // Optionally, remove the dialog listener if not needed anymore
-        dialog.removeEventListener('close', this);
-      }, { once: true }); // Ensures the listener is removed automatically after execution
-    });
+                // remove the highlight state from the tool
+                this.#uiManager._eventBus.dispatch("switchannotationeditormode",
+                    {
+                        source: this,
+                        mode: 0,
+                    });
 
-    this.#buttons.append(button);
-  }
+                // Optionally, remove the dialog listener if not needed anymore
+                dialog.removeEventListener('close', this);
+            }, {once: true}); // Ensures the listener is removed automatically after execution
+        });
+
+        this.#buttons.append(button);
+    }
 
 }
 
-export { EditorToolbar, HighlightToolbar };
+export {EditorToolbar, HighlightToolbar};
