@@ -13,11 +13,14 @@
  * limitations under the License.
  */
 
+
 import {RenderingStates, ScrollMode, SpreadMode} from "./ui_utils.js";
 import {AppOptions} from "./app_options.js";
 import {LinkTarget} from "./pdf_link_service.js";
 import {PDFViewerApplication} from "./app.js";
 import {RdfaParser} from "rdfa-streaming-parser";
+import WiserEventBus from "./WiserEventBus.js";
+import {handleConceptButtons} from "./modals/workerHandler.js";
 
 
 /* eslint-disable-next-line no-unused-vars */
@@ -31,6 +34,7 @@ const AppConstants =
     typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")
         ? {LinkTarget, RenderingStates, ScrollMode, SpreadMode}
         : null;
+
 
 window.PDFViewerApplication = PDFViewerApplication;
 window.PDFViewerApplicationConstants = AppConstants;
@@ -208,6 +212,9 @@ function webViewerLoad() {
         }
     }
     PDFViewerApplication.run(config);
+
+    // added by Jan
+
 }
 
 // Block the "load" event until all pages are loaded, to ensure that printing
@@ -218,13 +225,16 @@ if (
     document.readyState === "interactive" ||
     document.readyState === "complete"
 ) {
+
     //add by Jan
+    window.WiserEventBus = WiserEventBus
     const myParser = new RdfaParser({
         baseIRI: window.location.href,
         contentType: "text/html",
     });
 
     window.myParser = myParser;
+
 
     // done adding
     webViewerLoad();
@@ -237,3 +247,95 @@ export {
     AppConstants as PDFViewerApplicationConstants,
     AppOptions as PDFViewerApplicationOptions,
 };
+
+// code by WISER inc
+class Modal {
+    constructor() {
+        this.modalRoot = document.getElementById('modal-root');
+        this.initStore().then((success) => {
+            WiserEventBus.on('showModal', this.showModal.bind(this));
+            window.wiserEventBus = WiserEventBus
+        })
+    }
+
+    async initStore() {
+        this.myAtomicWorker = new Worker("/pdf_api/js/atomic.worker.js")
+        this.myAtomicWorker.onmessage = async (e) => {
+            switch (e.data.type) {
+                case "pong":
+                    const magicWord = e.data.magic;
+                    const content = e.data.content;
+                    WiserEventBus.emit(magicWord, {
+                        content
+                    });
+                    break;
+                case "conceptButtons":
+                    await handleConceptButtons(e.data);
+                    break;
+                // Add more cases here as needed
+                default:
+                    console.log("not yet implemented type", e)
+            }
+        };
+
+        // now init the buttons
+        this.myAtomicWorker.postMessage({
+            type: 'getConcepts',
+            user: 'potentialUser'
+        });
+    }
+
+
+    /**
+     * Function that accepts any object adhering to the IModal interface.
+     * @param {IModal} modal - An object that implements the IModal interface.
+     */
+    async showModal(modal) {
+        this.clearModal();
+
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'modal-overlay';
+
+        const modalContent = document.createElement('div');
+        modalContent.className = 'modal-content';
+        modalOverlay.appendChild(modalContent);
+
+        const content = document.createElement('div');
+        content.innerHTML = await modal.render(this.myAtomicWorker);
+        modalContent.appendChild(content);
+
+        const footer = document.createElement('div');
+        footer.className = 'modal-footer';
+
+        const saveButton = document.createElement('button');
+        saveButton.textContent = 'Save';
+        saveButton.addEventListener('click', async () => {
+            await modal.onSave(this.myAtomicWorker);
+            this.clearModal();
+        });
+
+        const closeButton = document.createElement('button');
+        closeButton.textContent = 'Close';
+        closeButton.addEventListener('click', async () => {
+            await modal.onClose();
+            this.clearModal();
+        });
+
+        footer.appendChild(saveButton);
+        footer.appendChild(closeButton);
+        modalContent.appendChild(footer);
+
+        this.modalRoot.appendChild(modalOverlay);
+    }
+
+    clearModal() {
+        this.modalRoot.innerHTML = '';
+    }
+}
+
+new Modal();
+
+
+
+
+

@@ -392,7 +392,7 @@ if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
     value:
       typeof PDFJSDev === "undefined"
         ? "../build/dev-sandbox/pdf.sandbox.mjs"
-        : "../build/pdf.sandbox.mjs",
+        : "../js/pdf.sandbox.mjs",
     kind: OptionKind.VIEWER,
   };
   defaultOptions.viewerCssTheme = {

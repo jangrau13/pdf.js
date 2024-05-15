@@ -577,8 +577,8 @@ class HighlightEditor extends AnnotationEditor {
     if (this.#rdfa_content) {
       const innerRdfa = document.createElement("div");
       innerRdfa.setAttribute("id", "rdfa-"+ this.#id)
-      innerRdfa.setAttribute("property", "http://purl.org/dc/terms/title");
-      innerRdfa.innerText = this.#rdfa_content;
+      innerRdfa.setAttribute("class", "rdfa-content")
+      innerRdfa.innerHTML = this.#rdfa_content;
       innerRdfa.style.display = "none";
       div.appendChild(innerRdfa);
     }

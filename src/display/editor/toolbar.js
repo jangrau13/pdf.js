@@ -14,6 +14,8 @@
  */
 
 import {noContextMenu} from "../display_utils.js";
+import {RDFaBuilder} from "../../../web/rdfa/RDFaBuilder.js";
+import {RDFaElement} from "../../../web/rdfa/RDFaElement.js";
 
 class EditorToolbar {
     #toolbar = null;
@@ -246,65 +248,16 @@ class HighlightToolbar {
         span.className = "visuallyHidden";
         span.setAttribute("data-l10n-id", "pdfjs-highlight-floating-button-label");
         button.addEventListener("contextmenu", noContextMenu);
+        const myHide = () => this.hide()
 
-        // Create dialog element
-        const dialog = document.createElement("dialog");
-        dialog.setAttribute("id", "userInputDialog");
-        dialog.style.width = '300px'; // Set the width of the dialog
-        dialog.style.border = '1px solid #ccc'; // Set the border of the dialog
-        dialog.style.borderRadius = '10px'; // Rounded corners for the dialog
-        dialog.style.padding = '20px'; // Padding inside the dialog
-        dialog.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)'; // Drop shadow for 3D effect
-        dialog.style.backgroundColor = '#fff'; // Background color of the dialog
-        dialog.innerHTML = `
-        <form method="dialog">
-            <h1 style="margin-bottom: 20px; color: black;" data-l10n-id="pdfjs-editor-janTester-title">Knowledge Annotator</h1>
-            <label for="input" style="display: block; margin-bottom: 10px; color: black;" data-l10n-id="pdfjs-editor-janTester-label">Please give me your knowledge:</label>
-            <input type="text" id="input" name="userinput" style="width: 100%; margin-bottom: 20px;">
-            <menu style="display: flex; justify-content: space-between;">
-                <button value="cancel" style="flex: 1; margin-right: 10px;">Cancel</button>
-                <button id="confirmBtn" value="default" style="flex: 1;">OK</button>
-            </menu>
-        </form>`;
-
-        document.body.appendChild(dialog); // Append dialog to body
-
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
             // Save the current selection before opening the dialog
             const selection = window.getSelection();
             const selectedRange = selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+            const uiManager = this.#uiManager
 
-            dialog.showModal(); // Display the modal dialog
-
-            dialog.addEventListener('close', () => {
-                const userInput = document.getElementById("input").value ? document.getElementById("input").value : null;
-                console.log("User input: ", userInput);
-                if (userInput !== null) {
-                    // Store the user input somewhere for further use
-                    document.getElementById('rdfa-tmp-storage').setAttribute('data-user-input', userInput);
-                    document.getElementById("input").value = ""; // Clear the input field
-                }
-
-                // Check if there was a saved selection
-                if (selectedRange) {
-                    // Restore the selection
-                    if (selection.rangeCount > 0) selection.removeAllRanges();
-                    selection.addRange(selectedRange);
-                }
-
-                // Execute the highlight action if needed
-                this.#uiManager.highlightSelection("floating_button");
-
-                // remove the highlight state from the tool
-                this.#uiManager._eventBus.dispatch("switchannotationeditormode",
-                    {
-                        source: this,
-                        mode: 0,
-                    });
-
-                // Optionally, remove the dialog listener if not needed anymore
-                dialog.removeEventListener('close', this);
-            }, {once: true}); // Ensures the listener is removed automatically after execution
+            const myFreshModal = await setupModal(selectedRange, selection, uiManager, myHide);
+            window.wiserEventBus.emit('showModal', myFreshModal);
         });
 
         this.#buttons.append(button);
@@ -312,4 +265,136 @@ class HighlightToolbar {
 
 }
 
-export {EditorToolbar, HighlightToolbar};
+
+async function setupModal(selectedRange, selection, uiManager, myHide) {
+    let shortname = ''
+    return {
+        async render(myWorker) {
+            const magicWord = 'magic_onSave_' + new Date().toISOString();
+            const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
+            const renderURL = 'https://wiser-atomic.tunnelto.dev/collections/ontology/concept/class/' + current_concept
+
+            //TODO: do no ping, but make something specific
+            myWorker.postMessage({
+                type: 'ping',
+                magic: magicWord,
+                url: renderURL
+            });
+
+            const reactionPromise = new Promise((resolve) => {
+                const reaction = (msg) => {
+                    shortname = msg.content;
+                    //TODO: here I should receive the whole container such as
+                    // const container = msg.container
+                    window.wiserEventBus.off(magicWord, reaction);
+
+                    // Create a container for the content
+                    const container = document.createElement('div');
+                    container.className = "wiserModal";
+
+                    // Create and set the title
+                    const title = document.createElement('h2');
+                    title.textContent = msg.content;
+                    title.className = 'title';
+                    container.appendChild(title);
+
+                    // Create a prompt asking the user whether they want to add information
+                    const prompt = document.createElement('p');
+                    prompt.textContent = 'Would you like to add information to the concept?';
+                    prompt.className = 'textInfo';
+                    container.appendChild(prompt);
+
+                    // Create an input field for user input
+                    const inputField = document.createElement('textarea');
+                    inputField.id = 'userInput';
+                    inputField.placeholder = 'Enter additional information here';
+                    inputField.className = 'inputField';
+                    container.appendChild(inputField);
+
+                    // Create a dropdown with some random information
+                    const dropdown = document.createElement('select');
+                    dropdown.id = 'userDropdown';
+                    dropdown.className = 'dropdown';
+
+                    const options = ['Option 1', 'Option 2', 'Option 3', 'Option 4'];
+                    options.forEach(optionText => {
+                        const option = document.createElement('option');
+                        option.value = optionText;
+                        option.textContent = optionText;
+                        dropdown.appendChild(option);
+                    });
+                    container.appendChild(dropdown);
+
+                    // Append the container to the document body or a specific element
+                    resolve(container.outerHTML);
+                };
+                window.wiserEventBus.on(magicWord, reaction);
+            });
+
+            return await reactionPromise;
+        },
+
+        //TODO: set the information on the save option in the AtomicWorker as well and use it here
+        async onSave(myWorker) {
+            const magicWord = 'magic_onSave_' + new Date().toISOString();
+            const userInput = document.getElementById('userInput').value;
+            const userSelection = document.getElementById('userDropdown').value;
+
+            //create rdfa here
+            const rdfaBuilder = new RDFaBuilder();
+
+            const container = new RDFaElement('div')
+                .setId(shortname)
+                .setVocab('http://schema.org/')
+                .setTypeof('Annotation');
+
+            const nameSpan = new RDFaElement('span')
+                .setAttribute('property', userInput)
+                .setTextContent(shortname);
+
+            const textDiv = new RDFaElement('div')
+                .setProperty('text')
+                .setTextContent(userSelection);
+
+            container.addChild(nameSpan).addChild(textDiv);
+            rdfaBuilder.addElement(container);
+
+            const builtHtml = rdfaBuilder.build()
+
+            document.getElementById('rdfa-tmp-storage').setAttribute('data-user-input', builtHtml)
+
+            // Check if there was a saved selection
+            if (selectedRange) {
+                // Restore the selection
+                if (selection.rangeCount > 0) selection.removeAllRanges();
+                selection.addRange(selectedRange);
+            }
+            // Execute the highlight action if needed
+            uiManager.highlightSelection("floating_button");
+
+            // remove the highlight state from the tool
+            uiManager._eventBus.dispatch("switchannotationeditormode",
+                {
+                    source: this,
+                    mode: 0,
+                });
+        },
+
+        /**
+         * Handles the close operation.
+         */
+        onClose() {
+            uiManager._eventBus.dispatch("switchannotationeditormode",
+                {
+                    source: this,
+                    mode: 0,
+                });
+            myHide()
+        }
+    };
+}
+
+export {
+    EditorToolbar,
+    HighlightToolbar
+};
