@@ -254,9 +254,21 @@ class Modal {
         this.modalRoot = document.getElementById('modal-root');
         this.initStore().then((success) => {
             WiserEventBus.on('showModal', this.showModal.bind(this));
+            WiserEventBus.on('downloadKnowledge', () => {
+                // Extract the HTML content as a string
+                const documentHTML = document.documentElement.outerHTML;
+
+                // Send the HTML string to the worker
+                this.myAtomicWorker.postMessage({
+                    type: 'addKnowledge',
+                    document: documentHTML
+                });
+            });
+
             window.wiserEventBus = WiserEventBus
         })
     }
+
 
     async initStore() {
         this.myAtomicWorker = new Worker("/pdf_api/js/atomic.worker.js")

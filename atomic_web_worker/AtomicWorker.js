@@ -1,4 +1,5 @@
 import {Agent, core, Resource, Store, CollectionBuilder} from "@tomic/lib";
+import * as cheerio from 'cheerio';
 
 
 const store = new Store();
@@ -27,15 +28,23 @@ function getComplementaryColor(hexColor) {
     let g = parseInt(hexColor.substr(2, 2), 16);
     let b = parseInt(hexColor.substr(4, 2), 16);
 
-    // Calculate the complementary color
-    r = 255 - r;
-    g = 255 - g;
-    b = 255 - b;
+    // Calculate the brightness (perceived luminance)
+    // Using the formula: 0.299*R + 0.587*G + 0.114*B
+    let brightness = 0.299 * r + 0.587 * g + 0.114 * b;
 
-    // Convert back to hex
-    let complementaryColor = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`;
+    // Determine the complementary color based on brightness
+    let complementaryColor;
+    if (brightness < 128) {
+        // If the color is dark, return white
+        complementaryColor = '#FFFFFF';
+    } else {
+        // If the color is bright, return black
+        complementaryColor = '#000000';
+    }
+
     return complementaryColor;
 }
+
 
 // Function to convert HEX to RGBA
 function hexToRgba(hex, alpha) {
@@ -71,7 +80,7 @@ async function handleRetrieveConcepts() {
             color = getRandomColor();
         }
         color = hexToRgba(color, 0.5);
-        const complementaryColor = '#ffffff'
+        const complementaryColor = getComplementaryColor(color)
 
         const htmlButton = (shortname, color, complementaryColor) => `
             <button 
@@ -191,6 +200,17 @@ async function createModal(url, magic, selectedText = '') {
     })
 }
 
+async function handleKnowledgeUpdate(message) {
+    // Retrieve elements with the class 'rdfa_content' and their children
+    const $ = cheerio.load(message.document);
+    const test = $('.rdfa-content')
+    console.log("can I go home now?", test)
+    //TODO: check somehow, whether the document needs to be saved first (so that the annotations are fixed
+    // if yes, then analyse the store for each of the annotation and if they are different, ask for update
+    // if they are new --> ask whether to add
+}
+
+
 onmessage = async (e) => {
     const message = e.data;
 
@@ -210,6 +230,13 @@ onmessage = async (e) => {
                 return;
             }
             await handleGetResource(message.url);
+            break;
+        case 'addKnowledge':
+            if(!message.document){
+                postMessage({type: 'addKnowledge', status: 'error', error: 'Document is required'});
+                return 
+            }
+            await handleKnowledgeUpdate(message)
             break;
         case 'ping':
             if (!message.magic || !message.url) {
