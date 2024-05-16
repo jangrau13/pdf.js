@@ -4609,14 +4609,10 @@ class HighlightAnnotation extends MarkupAnnotation {
     constructor(params) {
         super(params);
         this.janParam = params;
-        console.log("creating new Highlight Annotaton");
-        console.log(this.janParam);
-
         const {dict, xref} = params;
         this.data.annotationType = AnnotationType.HIGHLIGHT;
 
         const quadPoints = (this.data.quadPoints = getQuadPoints(dict, null));
-        console.log("quadPoints", quadPoints);
         if (quadPoints) {
             const resources = this.appearance?.dict.get("Resources");
 

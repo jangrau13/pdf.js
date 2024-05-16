@@ -1062,10 +1062,12 @@ const PDFViewerApplication = {
       const blob = new Blob([data], { type: "application/pdf" });
 
       await this.downloadManager.download(blob, url, filename, options);
+      // TODO: let the user decide whether to save it on axum or download it manually
     } catch {
       // When the PDF document isn't ready, or the PDF file is still
       // downloading, simply download using the URL.
-      await this.downloadManager.downloadUrl(url, filename, options);
+      //await this.downloadManager.downloadUrl(url, filename, options);
+      // TODO: let the user decide whether to save it on axum or download it manually
     }
   },
 

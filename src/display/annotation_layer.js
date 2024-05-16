@@ -611,7 +611,28 @@ class AnnotationElement {
     const { container, data } = this;
     container.setAttribute("aria-haspopup", "dialog");
 
-    console.log("popup created", container);
+    const newDiv = document.createElement("div");
+    newDiv.innerHTML = data.contentsObj.str
+    const popupDiv = document.getElementById("popus")
+    popupDiv.appendChild(newDiv)
+    // transform the contents to something useful
+    const usefulInfo = newDiv.querySelector('[data-wiser-content]');
+    const typeOfElement = newDiv.querySelector('[data-wiser-type]');
+
+    let finalContent = null
+
+    if (typeOfElement){
+      const actualType = typeOfElement.getAttribute("data-wiser-type")
+      finalContent = actualType + ": "
+    }
+
+    if (usefulInfo) {
+      const dataWiserContent = usefulInfo.getAttribute('data-wiser-content');
+      finalContent += dataWiserContent
+      data.contentsObj.str = finalContent
+    } else {
+      data.contentsObj.str = finalContent
+    }
 
     const popup = new PopupAnnotationElement({
       data: {
@@ -628,7 +649,9 @@ class AnnotationElement {
       parent: this.parent,
       elements: [this],
     });
+
     this.parent.div.append(popup.render());
+
   }
 
   /**

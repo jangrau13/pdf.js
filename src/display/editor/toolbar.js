@@ -267,63 +267,40 @@ class HighlightToolbar {
 
 
 async function setupModal(selectedRange, selection, uiManager, myHide) {
-    let shortname = ''
+    let currentMessage = null;
+    const selectedText = selection.toString();
+    let infoToLookFor = []
+    let appliedConcept = null
+    let currentConcept = null
     return {
         async render(myWorker) {
             const magicWord = 'magic_onSave_' + new Date().toISOString();
             const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
             const renderURL = 'https://wiser-atomic.tunnelto.dev/collections/ontology/concept/class/' + current_concept
+            appliedConcept = renderURL
 
-            //TODO: do no ping, but make something specific
+
             myWorker.postMessage({
-                type: 'ping',
+                type: 'createModal',
                 magic: magicWord,
-                url: renderURL
+                url: renderURL,
+                selectedText
             });
 
             const reactionPromise = new Promise((resolve) => {
                 const reaction = (msg) => {
-                    shortname = msg.content;
+                    currentMessage = msg;
                     //TODO: here I should receive the whole container such as
                     // const container = msg.container
                     window.wiserEventBus.off(magicWord, reaction);
+                    const myDiv = currentMessage.content;
+                    infoToLookFor = currentMessage.infoToLookFor
 
                     // Create a container for the content
                     const container = document.createElement('div');
                     container.className = "wiserModal";
 
-                    // Create and set the title
-                    const title = document.createElement('h2');
-                    title.textContent = msg.content;
-                    title.className = 'title';
-                    container.appendChild(title);
-
-                    // Create a prompt asking the user whether they want to add information
-                    const prompt = document.createElement('p');
-                    prompt.textContent = 'Would you like to add information to the concept?';
-                    prompt.className = 'textInfo';
-                    container.appendChild(prompt);
-
-                    // Create an input field for user input
-                    const inputField = document.createElement('textarea');
-                    inputField.id = 'userInput';
-                    inputField.placeholder = 'Enter additional information here';
-                    inputField.className = 'inputField';
-                    container.appendChild(inputField);
-
-                    // Create a dropdown with some random information
-                    const dropdown = document.createElement('select');
-                    dropdown.id = 'userDropdown';
-                    dropdown.className = 'dropdown';
-
-                    const options = ['Option 1', 'Option 2', 'Option 3', 'Option 4'];
-                    options.forEach(optionText => {
-                        const option = document.createElement('option');
-                        option.value = optionText;
-                        option.textContent = optionText;
-                        dropdown.appendChild(option);
-                    });
-                    container.appendChild(dropdown);
+                    container.innerHTML = myDiv;
 
                     // Append the container to the document body or a specific element
                     resolve(container.outerHTML);
@@ -336,30 +313,29 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
 
         //TODO: set the information on the save option in the AtomicWorker as well and use it here
         async onSave(myWorker) {
-            const magicWord = 'magic_onSave_' + new Date().toISOString();
-            const userInput = document.getElementById('userInput').value;
-            const userSelection = document.getElementById('userDropdown').value;
-
-            //create rdfa here
+            const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
             const rdfaBuilder = new RDFaBuilder();
-
             const container = new RDFaElement('div')
-                .setId(shortname)
                 .setVocab('http://schema.org/')
-                .setTypeof('Annotation');
+                .setTypeof(appliedConcept)
+                .setAttribute('data-wiser-type', current_concept)
+            for(const infoIndex of infoToLookFor){
+                const importantInfo = document.getElementById(infoIndex)
 
-            const nameSpan = new RDFaElement('span')
-                .setAttribute('property', userInput)
-                .setTextContent(shortname);
+                if(infoIndex === "https://wiser-atomic.tunnelto.dev/property/th1piubjse"){
+                    container.setId(importantInfo.value)
+                }else{
+                    const infoSpan = new RDFaElement('span')
+                        .setAttribute('property', infoIndex)
+                        .setTextContent(importantInfo.value);
+                    container.addChild(infoSpan)
+                }
 
-            const textDiv = new RDFaElement('div')
-                .setProperty('text')
-                .setTextContent(userSelection);
-
-            container.addChild(nameSpan).addChild(textDiv);
+            }
             rdfaBuilder.addElement(container);
 
             const builtHtml = rdfaBuilder.build()
+            console.log("adding knowledge", builtHtml)
 
             document.getElementById('rdfa-tmp-storage').setAttribute('data-user-input', builtHtml)
 

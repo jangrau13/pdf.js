@@ -9,6 +9,7 @@ export class RDFaElement {
     setId(value) {
         this.setAttribute('id', value);
         this.setAttribute('data-wiser-id', value);
+        this.setAttribute('resource', '#' + value)
         return this;
     }
 

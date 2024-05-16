@@ -8,6 +8,16 @@ const myAgent = new Agent(
     "https://wiser-atomic.tunnelto.dev/agents/LwgknNqeuvB6vVwjg1qtMgoqezce9nLh4RId5GKlQa4=",
 );
 
+function slugify(text) {
+    return text
+        .toString()                          // Convert to string
+        .toLowerCase()                       // Convert to lowercase
+        .trim()                              // Trim leading and trailing whitespace
+        .replace(/\s+/g, '-')                // Replace spaces with -
+        .replace(/[^\w\-]+/g, '')            // Remove all non-word chars
+        .replace(/\-\-+/g, '-');             // Replace multiple - with single -
+}
+
 function getComplementaryColor(hexColor) {
     // Remove the hash at the start if it's there
     hexColor = hexColor.replace(/^#/, '');
@@ -82,6 +92,105 @@ async function handleRetrieveConcepts() {
     })
 }
 
+async function handleTextArea(myVisual, container, selectedText = '', infoToLookFor) {
+    const inputFor = myVisual.get("https://wiser-atomic.tunnelto.dev/collections/ontology/visuals/property/is-input-for");
+    const inputInfos = await store.getResourceAsync(inputFor);
+    const label = inputInfos.get("https://atomicdata.dev/properties/description");
+    const placeholder = inputInfos.get("https://wiser-atomic.tunnelto.dev/property/placeholder");
+    infoToLookFor.push(inputFor)
+    // check for ID
+    if (inputFor === "https://wiser-atomic.tunnelto.dev/property/th1piubjse") {
+        container += `
+            <div style="display: grid; grid-template-columns: 1fr; grid-gap: 8px;">
+                <label for="${inputFor}">${label}</label>
+                <input type="text" class="inputField" name="${inputFor}" id="${inputFor}" placeholder="${placeholder}" value="${slugify(selectedText)}">
+            </div>
+        `;
+    } else {
+        container += `
+        <div style="display: grid; grid-template-columns: 1fr; grid-gap: 8px;">
+            <label for="${inputFor}" >${label}</label>
+            <textarea class="textareaField" name="${inputFor}" id="${inputFor}" placeholder="${placeholder}"></textarea>
+        </div>
+    `;
+    }
+
+    return container;
+}
+
+async function handleDropDown(myVisual, container, selectedText, infoToLookFor) {
+    const inputFor = myVisual.get("https://wiser-atomic.tunnelto.dev/collections/ontology/visuals/property/is-input-for");
+    const optionClass = myVisual.get("https://wiser-atomic.tunnelto.dev/collections/ontology/visuals/property/option-class");
+    // retrieve the list of all the instances of the option class
+    const optionClassResource = await store.getResourceAsync(optionClass);
+    const listName = optionClassResource.get("https://atomicdata.dev/properties/shortname")
+    const myClasses = optionClassResource.get("https://atomicdata.dev/properties/classes")
+    infoToLookFor.push(inputFor)
+
+    let dropdown = `
+        <div>
+            <label for="${inputFor}">${listName}</label>
+            <select class="dropdown" name="${inputFor}" id="${inputFor}">
+    `;
+
+    // Populate the dropdown with options
+    for (const key of myClasses) {
+        const snResource = await store.getResourceAsync(key);
+        const optionValue = snResource.get("https://atomicdata.dev/properties/shortname");
+        dropdown += `<option value="${key}">${optionValue}</option>`;
+    }
+
+    // Close the dropdown
+    dropdown += `
+            </select>
+        </div>
+    `;
+
+    // Add the dropdown to the container
+    container += dropdown;
+
+    return container
+}
+
+async function createModal(url, magic, selectedText = '') {
+    const concept = await store.getResourceAsync(url)
+    const description = concept.get("https://atomicdata.dev/properties/description")
+    const shortName = concept.get("https://atomicdata.dev/properties/shortname")
+    const visuals = concept.get("https://wiser-atomic.tunnelto.dev/collections/ontology/concept/property/has-visuals")
+    let infoToLookFor = []
+    let container = '<div>'
+    container += `
+                    <h2 class="title"> ${shortName} </h2>
+                    <div class="textInfo">${description}</div>
+                `
+    for (const visualIndex in visuals) {
+        const myVisual = await store.getResourceAsync(visuals[visualIndex])
+        // only one class is allowed anyway
+        const clazz = myVisual.getClasses()[0];
+        // define container
+
+        switch (clazz) {
+            case "https://wiser-atomic.tunnelto.dev/collections/ontology/visuals/class/textarea":
+                container = await handleTextArea(myVisual, container, selectedText, infoToLookFor);
+                break;
+            case "https://wiser-atomic.tunnelto.dev/collections/ontology/visuals/class/dropdown":
+                container = await handleDropDown(myVisual, container, selectedText, infoToLookFor);
+                break;
+            default:
+                break;
+        }
+    }
+    //close container
+    container += '</div>'
+    const myDiv = container
+    postMessage({
+        type: 'pong',
+        magic,
+        content: myDiv,
+        infoToLookFor
+    })
+}
+
 onmessage = async (e) => {
     const message = e.data;
 
@@ -117,6 +226,17 @@ onmessage = async (e) => {
                 magic: message.magic,
                 content: sn
             });
+            break;
+        case 'createModal':
+            if (!message.url || !message.magic) {
+                postMessage({type: 'createModal', status: 'error', error: 'I need to have a url and a magic word'})
+                return;
+            }
+            if (message.selectedText) {
+                await createModal(message.url, message.magic, message.selectedText)
+            } else {
+                await createModal(message.url, message.magic)
+            }
             break;
         default:
             console.error("Unknown message type:", message.type);

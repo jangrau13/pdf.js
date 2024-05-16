@@ -265,8 +265,10 @@ class Modal {
                 case "pong":
                     const magicWord = e.data.magic;
                     const content = e.data.content;
+                    const infoToLookFor = e.data.infoToLookFor
                     WiserEventBus.emit(magicWord, {
-                        content
+                        content,
+                        infoToLookFor
                     });
                     break;
                 case "conceptButtons":
