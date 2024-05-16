@@ -185,6 +185,7 @@ async function createModal(url, magic, selectedText = '') {
             case "https://wiser-atomic.tunnelto.dev/collections/ontology/visuals/class/dropdown":
                 container = await handleDropDown(myVisual, container, selectedText, infoToLookFor);
                 break;
+                //TODO: add required/recommended
             default:
                 break;
         }
@@ -203,13 +204,42 @@ async function createModal(url, magic, selectedText = '') {
 async function handleKnowledgeUpdate(message) {
     // Retrieve elements with the class 'rdfa_content' and their children
     const $ = cheerio.load(message.document);
-    const test = $('.rdfa-content')
-    console.log("can I go home now?", test)
-    //TODO: check somehow, whether the document needs to be saved first (so that the annotations are fixed
-    // if yes, then analyse the store for each of the annotation and if they are different, ask for update
-    // if they are new --> ask whether to add
+    const rdfasInHTML = $('.rdfa-content')
+    for (const rdfaElement of rdfasInHTML) {
+        const cheerioElement = $(rdfaElement);
+        const childrenWithTypeof = cheerioElement.find('[typeof]');
+        if (childrenWithTypeof.length > 0) {
+            const newId = $(childrenWithTypeof[0]).attr('data-wiser-id')
+            const className = $(childrenWithTypeof[0]).attr('typeof')
+            const newSubject = store.createSubject(getLastPartOfURL(className))
+            //TODO: check for the same WISER-ID
+            if (await store.checkSubjectTaken(newSubject)) {
+                console.log("subject already taken, react to it", newSubject)
+                return
+            } else {
+                const newResource = new Resource(newSubject);
+                const reallyNewResource = await store.newResource(newResource)
+                if(newId){
+                    await reallyNewResource.set("https://wiser-atomic.tunnelto.dev/property/th1piubjse", newId, store);
+                    await reallyNewResource.set(core.properties.shortname, newId, store);
+                }
+                await reallyNewResource.addClasses(store, className.toString());
+                for (const child of childrenWithTypeof[0].children) {
+                    const prop = $(child).attr('property')
+                    const val = $(child).attr('data-wiser-content')
+                    await reallyNewResource.set(prop, val, store)
+                }
+                const commit = await reallyNewResource.save(store);
+                console.log("new Resource", newSubject)
+            }
+        }
+    }
 }
 
+function getLastPartOfURL(url) {
+    const parts = url.split('/');
+    return parts[parts.length - 1];
+}
 
 onmessage = async (e) => {
     const message = e.data;
@@ -232,9 +262,9 @@ onmessage = async (e) => {
             await handleGetResource(message.url);
             break;
         case 'addKnowledge':
-            if(!message.document){
+            if (!message.document) {
                 postMessage({type: 'addKnowledge', status: 'error', error: 'Document is required'});
-                return 
+                return
             }
             await handleKnowledgeUpdate(message)
             break;
