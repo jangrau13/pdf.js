@@ -71,7 +71,7 @@ class HighlightEditor extends AnnotationEditor {
 
   static _defaultColor = null;
 
-  static _defaultOpacity = 1;
+  static _defaultOpacity = 0.5;
 
   static _defaultThickness = 12;
 
@@ -385,7 +385,7 @@ class HighlightEditor extends AnnotationEditor {
     if (this._uiManager.highlightColors) {
       this.#colorPicker = new ColorPicker({ editor: this });
       //toolbar.addColorPicker(this.#colorPicker);
-      toolbar.addJanEditorTool();
+      //toolbar.addJanEditorTool();
     }
     return toolbar;
   }
@@ -787,7 +787,6 @@ class HighlightEditor extends AnnotationEditor {
   /** @inheritdoc */
   static deserialize(data, parent, uiManager) {
     const editor = super.deserialize(data, parent, uiManager);
-
     const {
       rect: [blX, blY, trX, trY],
       color,

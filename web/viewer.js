@@ -20,7 +20,7 @@ import {LinkTarget} from "./pdf_link_service.js";
 import {PDFViewerApplication} from "./app.js";
 import {RdfaParser} from "rdfa-streaming-parser";
 import WiserEventBus from "./WiserEventBus.js";
-import {handleConceptButtons} from "./modals/workerHandler.js";
+import {handleConceptButtons, handleUpdatePDFAfterKGAdd} from "./modals/workerHandler.js";
 
 
 /* eslint-disable-next-line no-unused-vars */
@@ -227,13 +227,18 @@ if (
 ) {
 
     //add by Jan
+    window.myAtomicWorker = new Worker("/pdf_api/js/atomic.worker.js")
     window.WiserEventBus = WiserEventBus
+
+    /*
     const myParser = new RdfaParser({
         baseIRI: window.location.href,
         contentType: "text/html",
     });
 
     window.myParser = myParser;
+
+     */
 
 
     // done adding
@@ -248,6 +253,7 @@ export {
     AppOptions as PDFViewerApplicationOptions,
 };
 
+
 // code by WISER inc
 class Modal {
     constructor() {
@@ -257,9 +263,7 @@ class Modal {
             WiserEventBus.on('downloadKnowledge', () => {
                 // Extract the HTML content as a string
                 const documentHTML = document.documentElement.outerHTML;
-
-                // Send the HTML string to the worker
-                this.myAtomicWorker.postMessage({
+                window.myAtomicWorker.postMessage({
                     type: 'addKnowledge',
                     document: documentHTML
                 });
@@ -269,36 +273,44 @@ class Modal {
         })
     }
 
-
     async initStore() {
-        this.myAtomicWorker = new Worker("/pdf_api/js/atomic.worker.js")
-        this.myAtomicWorker.onmessage = async (e) => {
+        window.myAtomicWorker.onmessage = async (e) => {
             switch (e.data.type) {
                 case "pong":
                     const magicWord = e.data.magic;
                     const content = e.data.content;
-                    const infoToLookFor = e.data.infoToLookFor
+                    const infoToLookFor = e.data.infoToLookFor;
+                    const potentialSubject = e.data.potentialSubject;
                     WiserEventBus.emit(magicWord, {
                         content,
-                        infoToLookFor
+                        infoToLookFor,
+                        potentialSubject
                     });
                     break;
                 case "conceptButtons":
                     await handleConceptButtons(e.data);
                     break;
                 // Add more cases here as needed
+                case 'updatePDFAfterKGAdd':
+                    await handleUpdatePDFAfterKGAdd(e.data, document)
+                    break;
+                case 'ping':
+                    //ignore
+                    break;
                 default:
                     console.log("not yet implemented type", e)
             }
         };
 
         // now init the buttons
-        this.myAtomicWorker.postMessage({
+        window.myAtomicWorker.postMessage({
             type: 'getConcepts',
             user: 'potentialUser'
         });
-    }
 
+
+        window.myAtomicWorker = myAtomicWorker
+    }
 
     /**
      * Function that accepts any object adhering to the IModal interface.
@@ -315,7 +327,7 @@ class Modal {
         modalOverlay.appendChild(modalContent);
 
         const content = document.createElement('div');
-        content.innerHTML = await modal.render(this.myAtomicWorker);
+        content.innerHTML = await modal.render(window.myAtomicWorker);
         modalContent.appendChild(content);
 
         const footer = document.createElement('div');
@@ -324,7 +336,7 @@ class Modal {
         const saveButton = document.createElement('button');
         saveButton.textContent = 'Save';
         saveButton.addEventListener('click', async () => {
-            await modal.onSave(this.myAtomicWorker);
+            await modal.onSave(window.myAtomicWorker);
             this.clearModal();
         });
 

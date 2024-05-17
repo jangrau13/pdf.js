@@ -267,18 +267,18 @@ class HighlightToolbar {
 
 
 async function setupModal(selectedRange, selection, uiManager, myHide) {
+    // lame, but like this I don't have to do round-trips
     let currentMessage = null;
     const selectedText = selection.toString();
     let infoToLookFor = []
     let appliedConcept = null
-    let currentConcept = null
+    let potentialSubject = null
     return {
         async render(myWorker) {
             const magicWord = 'magic_onSave_' + new Date().toISOString();
             const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
             const renderURL = 'https://wiser-atomic.tunnelto.dev/collections/ontology/concept/class/' + current_concept
             appliedConcept = renderURL
-
 
             myWorker.postMessage({
                 type: 'createModal',
@@ -295,6 +295,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
                     window.wiserEventBus.off(magicWord, reaction);
                     const myDiv = currentMessage.content;
                     infoToLookFor = currentMessage.infoToLookFor
+                    potentialSubject = currentMessage.potentialSubject
 
                     // Create a container for the content
                     const container = document.createElement('div');
@@ -321,9 +322,9 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
                 .setAttribute('data-wiser-type', current_concept)
             for(const infoIndex of infoToLookFor){
                 const importantInfo = document.getElementById(infoIndex)
-
                 if(infoIndex === "https://wiser-atomic.tunnelto.dev/property/th1piubjse"){
                     container.setId(importantInfo.value)
+                    container.setAttribute('data-wiser-potential-subject', potentialSubject)
                 }else{
                     const infoSpan = new RDFaElement('span')
                         .setAttribute('property', infoIndex)
@@ -348,12 +349,15 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
             // Execute the highlight action if needed
             uiManager.highlightSelection("floating_button");
 
+
             // remove the highlight state from the tool
             uiManager._eventBus.dispatch("switchannotationeditormode",
                 {
                     source: this,
                     mode: 0,
                 });
+
+
         },
 
         /**

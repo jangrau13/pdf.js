@@ -4651,7 +4651,8 @@ class HighlightAnnotation extends MarkupAnnotation {
     }
 
     static createNewDict(annotation, xref, {apRef, ap, marks_on_page}) {
-
+        let wiserOpacity = 0.5
+        let rdfa
         const {color, opacity, rect, rotation, user, quadPoints} = annotation;
         const highlight = new Dict(xref);
         highlight.set("Type", Name.get("Annot"));
@@ -4669,7 +4670,7 @@ class HighlightAnnotation extends MarkupAnnotation {
         }
 
         if (closestMark) {
-            const rdfa = closestMark.children.filter(child => {
+            rdfa = closestMark.children.filter(child => {
                 const attributes = child.attributes
                 return attributes["class"] === "rdfa-content"
             })[0]
@@ -4688,8 +4689,14 @@ class HighlightAnnotation extends MarkupAnnotation {
             Array.from(color, c => c / 255)
         );
 
-        // Opacity.
-        highlight.set("CA", opacity);
+        if(rdfa){
+            // if WISER, then set opacity to 0.5
+            console.log("setting opacity to WISER", wiserOpacity)
+            console.log("old opacity", opacity)
+            highlight.set("CA", wiserOpacity);
+        }else{
+            highlight.set("CA", opacity);
+        }
 
         if (user) {
             highlight.set(

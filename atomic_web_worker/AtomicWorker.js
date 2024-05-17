@@ -161,8 +161,14 @@ async function handleDropDown(myVisual, container, selectedText, infoToLookFor) 
     return container
 }
 
+function getLastPartOfURL(url) {
+    const parts = url.split('/');
+    return parts[parts.length - 1];
+}
+
 async function createModal(url, magic, selectedText = '') {
     const concept = await store.getResourceAsync(url)
+    const potentialSubject = store.createSubject(getLastPartOfURL(url))
     const description = concept.get("https://atomicdata.dev/properties/description")
     const shortName = concept.get("https://atomicdata.dev/properties/shortname")
     const visuals = concept.get("https://wiser-atomic.tunnelto.dev/collections/ontology/concept/property/has-visuals")
@@ -185,7 +191,7 @@ async function createModal(url, magic, selectedText = '') {
             case "https://wiser-atomic.tunnelto.dev/collections/ontology/visuals/class/dropdown":
                 container = await handleDropDown(myVisual, container, selectedText, infoToLookFor);
                 break;
-                //TODO: add required/recommended
+            //TODO: add required/recommended
             default:
                 break;
         }
@@ -197,7 +203,8 @@ async function createModal(url, magic, selectedText = '') {
         type: 'pong',
         magic,
         content: myDiv,
-        infoToLookFor
+        infoToLookFor,
+        potentialSubject
     })
 }
 
@@ -205,40 +212,47 @@ async function handleKnowledgeUpdate(message) {
     // Retrieve elements with the class 'rdfa_content' and their children
     const $ = cheerio.load(message.document);
     const rdfasInHTML = $('.rdfa-content')
+    const updatedElements = []
     for (const rdfaElement of rdfasInHTML) {
         const cheerioElement = $(rdfaElement);
         const childrenWithTypeof = cheerioElement.find('[typeof]');
         if (childrenWithTypeof.length > 0) {
-            const newId = $(childrenWithTypeof[0]).attr('data-wiser-id')
-            const className = $(childrenWithTypeof[0]).attr('typeof')
-            const newSubject = store.createSubject(getLastPartOfURL(className))
-            //TODO: check for the same WISER-ID
-            if (await store.checkSubjectTaken(newSubject)) {
-                console.log("subject already taken, react to it", newSubject)
-                return
-            } else {
-                const newResource = new Resource(newSubject);
-                const reallyNewResource = await store.newResource(newResource)
-                if(newId){
-                    await reallyNewResource.set("https://wiser-atomic.tunnelto.dev/property/th1piubjse", newId, store);
-                    await reallyNewResource.set(core.properties.shortname, newId, store);
+            // only update the ones with a potential-wiser-id
+            const potentialID =  $(childrenWithTypeof[0]).attr('data-wiser-potential-subject')
+            if(potentialID){
+                console.log("creating Element", potentialID)
+                const newId = $(childrenWithTypeof[0]).attr('data-wiser-id')
+                const className = $(childrenWithTypeof[0]).attr('typeof')
+                const newSubject = potentialID
+                //TODO: check for the same WISER-ID
+                if (await store.checkSubjectTaken(newSubject)) {
+                    console.log("subject already taken, react to it", newSubject)
+                    return
+                } else {
+                    const newResource = new Resource(newSubject);
+                    const reallyNewResource = await store.newResource(newResource)
+                    if (newId) {
+                        await reallyNewResource.set("https://wiser-atomic.tunnelto.dev/property/th1piubjse", newId, store);
+                        await reallyNewResource.set(core.properties.shortname, newId, store);
+                    }
+                    await reallyNewResource.addClasses(store, className.toString());
+                    for (const child of childrenWithTypeof[0].children) {
+                        const prop = $(child).attr('property')
+                        const val = $(child).attr('data-wiser-content')
+                        await reallyNewResource.set(prop, val, store)
+                    }
+                    const commit = await reallyNewResource.save(store);
+                    // TODO: make a better check, whether the element go really created
+                    updatedElements.push(newSubject)
                 }
-                await reallyNewResource.addClasses(store, className.toString());
-                for (const child of childrenWithTypeof[0].children) {
-                    const prop = $(child).attr('property')
-                    const val = $(child).attr('data-wiser-content')
-                    await reallyNewResource.set(prop, val, store)
-                }
-                const commit = await reallyNewResource.save(store);
-                console.log("new Resource", newSubject)
             }
         }
     }
-}
-
-function getLastPartOfURL(url) {
-    const parts = url.split('/');
-    return parts[parts.length - 1];
+    // here I can give the infos I want to for the PDF save after everything is done
+    postMessage({
+        type: 'updatePDFAfterKGAdd',
+        updatedElements
+    })
 }
 
 onmessage = async (e) => {
@@ -273,15 +287,11 @@ onmessage = async (e) => {
                 postMessage({type: 'ping', status: 'error', error: 'magic and url is required'});
                 return;
             }
-            const gotRes = await store.getResourceAsync(message.url)
-            let sn = 'no Concept found'
-            if (gotRes) {
-                sn = await gotRes.get("https://atomicdata.dev/properties/shortname");
-            }
+            const gotRes = await store.checkSubjectTaken(message.url)
             postMessage({
                 type: 'pong',
                 magic: message.magic,
-                content: sn
+                content: gotRes
             });
             break;
         case 'createModal':

@@ -43,7 +43,12 @@ function download(blobUrl, filename) {
     a.remove();
 }
 
-function saveToServer(blob, filename) {
+function saveToServer(blob, filename, savingDone) {
+    let method = 'POST'
+    if(savingDone){
+        method = 'PUT'
+    }
+
     // Implement your server-side save logic here
     console.log(`Saving ${filename} to server...`);
 
@@ -51,8 +56,8 @@ function saveToServer(blob, filename) {
     const formData = new FormData();
     formData.append('file', blob, filename);
 
-    fetch('/api/savepdf', {
-        method: 'POST',
+    fetch('/api/pdf', {
+        method,
         body: formData
     }).then(response => {
         if (response.ok) {
@@ -136,14 +141,30 @@ class DownloadManager {
     }
 
     download(blob, url, filename, _options) {
-        const finalFilename = prompt("Please enter the filename:", filename);
-
-        // Ask user whether they want to save it to the server or download the PDF
-        const choice = confirm("Do you want to save it to the server? Click 'OK' to save to server, 'Cancel' to download the PDF.");
-
-        if (choice) {
+        const saveKGButton = document.getElementById("saveKnowledge")
+        let savingDone = saveKGButton.getAttribute("saving-done")
+        let choice = false
+        let finalFilename = filename
+        // if saving-done is true, we don't have to ask, we go directly to update
+        if(!savingDone){
+            console.log("this is a normal save")
+            const finalFilename = prompt("Please enter the filename:", filename);
+            // Ask user whether they want to save it to the server or download the PDF
+            choice = confirm("Do you want to save it to the server? Click 'OK' to save to server, 'Cancel' to download the PDF.");
+        }
+        if (choice || savingDone) {
+            console.log("saving it with savingDone", savingDone)
             // User chose to save it to the server
-            saveToServer(blob, finalFilename);
+            saveToServer(blob, finalFilename, savingDone);
+            // allow the saving of knowledge now
+            const subTitleComponent = document.getElementById("myPDFTitle")
+            if(subTitleComponent){
+                subTitleComponent.textContent = subTitleComponent.textContent.replace("*","")
+            }
+            if(saveKGButton){
+                // remove the saving done for sure
+                saveKGButton.removeAttribute("saving-done")
+            }
         } else {
             // User chose to download the PDF
             const blobUrl = URL.createObjectURL(blob);
