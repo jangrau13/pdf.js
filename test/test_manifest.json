@@ -5407,6 +5407,20 @@
     "type": "eq"
   },
   {
+    "id": "issue18117",
+    "file": "pdfs/issue18117.pdf",
+    "md5": "0be6391f9910d807a0ded5e6913ff7e3",
+    "rounds": 1,
+    "type": "eq"
+  },
+  {
+    "id": "issue18117-text",
+    "file": "pdfs/issue18117.pdf",
+    "md5": "0be6391f9910d807a0ded5e6913ff7e3",
+    "rounds": 1,
+    "type": "text"
+  },
+  {
     "id": "issue4890",
     "file": "pdfs/issue4890.pdf",
     "md5": "1666feb4cd26318c2bdbea6a175dce87",
@@ -9957,5 +9971,29 @@
         "id": "51R"
       }
     }
+  },
+  {
+    "id": "issue17779",
+    "file": "pdfs/issue17779.pdf",
+    "md5": "764b72e8e56e22662b321b308254fd2b",
+    "rounds": 1,
+    "link": true,
+    "type": "eq"
+  },
+  {
+    "id": "issue14724",
+    "file": "pdfs/issue14724.pdf",
+    "md5": "34ecf91792eb54d58e0e86f877017f71",
+    "rounds": 1,
+    "link": true,
+    "type": "eq"
+  },
+  {
+    "id": "issue14982",
+    "file": "pdfs/issue14982.pdf",
+    "md5": "bbd7d7f75f51a477b56b6e3f69174d06",
+    "rounds": 1,
+    "link": true,
+    "type": "eq"
   }
 ]

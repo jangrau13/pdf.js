@@ -35,7 +35,6 @@ import postcssNesting from "postcss-nesting";
 import {preprocess} from "./external/builder/builder.mjs";
 import rename from "gulp-rename";
 import replace from "gulp-replace";
-import rimraf from "rimraf";
 import stream from "stream";
 import streamqueue from "streamqueue";
 import TerserPlugin from "terser-webpack-plugin";
@@ -99,10 +98,10 @@ const AUTOPREFIXER_CONFIG = {
 const BABEL_TARGETS = ENV_TARGETS.join(", ");
 
 const BABEL_PRESET_ENV_OPTS = Object.freeze({
-    corejs: "3.37.0",
-    exclude: ["web.structured-clone"],
-    shippedProposals: true,
-    useBuiltIns: "usage",
+  corejs: "3.37.1",
+  exclude: ["web.structured-clone"],
+  shippedProposals: true,
+  useBuiltIns: "usage",
 });
 
 const DEFINES = Object.freeze({
@@ -443,27 +442,21 @@ function checkChromePreferencesFile(chromePrefsPath, webPrefs) {
 }
 
 function tweakWebpackOutput(jsName) {
-    const replacer = [
-        " __webpack_exports__ = {};",
-        ",__webpack_exports__={};",
-        " __webpack_exports__ = await __webpack_exports__;",
-        "\\(__webpack_exports__=await __webpack_exports__\\)",
-    ];
-    const regex = new RegExp(`(${replacer.join("|")})`, "gm");
+  const replacer = [
+    " __webpack_exports__ = {};", // Normal builds.
+    ",__webpack_exports__={};", // Minified builds.
+  ];
+  const regex = new RegExp(`(${replacer.join("|")})`, "gm");
 
-    return replace(regex, match => {
-        switch (match) {
-            case " __webpack_exports__ = {};":
-                return ` __webpack_exports__ = globalThis.${jsName} = {};`;
-            case ",__webpack_exports__={};":
-                return `,__webpack_exports__=globalThis.${jsName}={};`;
-            case " __webpack_exports__ = await __webpack_exports__;":
-                return ` __webpack_exports__ = globalThis.${jsName} = await (globalThis.${jsName}Promise = __webpack_exports__);`;
-            case "(__webpack_exports__=await __webpack_exports__)":
-                return `(__webpack_exports__=globalThis.${jsName}=await (globalThis.${jsName}Promise=__webpack_exports__))`;
-        }
-        return match;
-    });
+  return replace(regex, match => {
+    switch (match) {
+      case " __webpack_exports__ = {};":
+        return ` __webpack_exports__ = globalThis.${jsName} = {};`;
+      case ",__webpack_exports__={};":
+        return `,__webpack_exports__=globalThis.${jsName}={};`;
+    }
+    return match;
+  });
 }
 
 function createMainBundle(defines) {
@@ -930,8 +923,8 @@ gulp.task("locale", function () {
     console.log();
     console.log("### Building localization files");
 
-    rimraf.sync(VIEWER_LOCALE_OUTPUT);
-    fs.mkdirSync(VIEWER_LOCALE_OUTPUT, {recursive: true});
+  fs.rmSync(VIEWER_LOCALE_OUTPUT, { recursive: true, force: true });
+  fs.mkdirSync(VIEWER_LOCALE_OUTPUT, { recursive: true });
 
     const subfolders = fs.readdirSync(L10N_DIR);
     subfolders.sort();
@@ -1033,7 +1026,7 @@ function preprocessHTML(source, defines) {
 }
 
 function buildGeneric(defines, dir) {
-    rimraf.sync(dir);
+  fs.rmSync(dir, { recursive: true, force: true });
 
     return merge([
         createMainBundle(defines).pipe(gulp.dest(dir + "build")),
@@ -1242,7 +1235,7 @@ gulp.task(
 );
 
 function buildComponents(defines, dir) {
-    rimraf.sync(dir);
+  fs.rmSync(dir, { recursive: true, force: true });
 
     const COMPONENTS_IMAGES = [
         "web/images/annotation-*.svg",
@@ -1328,7 +1321,7 @@ gulp.task(
 );
 
 function buildMinified(defines, dir) {
-    rimraf.sync(dir);
+  fs.rmSync(dir, { recursive: true, force: true });
 
     return merge([
         createMainBundle(defines).pipe(gulp.dest(dir + "build")),
@@ -1458,8 +1451,8 @@ gulp.task(
                 overrideBrowserslist: ["last 1 firefox versions"],
             };
 
-            // Clear out everything in the firefox extension build directory
-            rimraf.sync(MOZCENTRAL_DIR);
+      // Clear out everything in the firefox extension build directory
+      fs.rmSync(MOZCENTRAL_DIR, { recursive: true, force: true });
 
             return merge([
                 createMainBundle(defines).pipe(
@@ -1557,8 +1550,8 @@ gulp.task(
                 "!web/images/toolbarButton-openFile.svg",
             ];
 
-            // Clear out everything in the chrome extension build directory
-            rimraf.sync(CHROME_BUILD_DIR);
+      // Clear out everything in the chrome extension build directory
+      fs.rmSync(CHROME_BUILD_DIR, { recursive: true, force: true });
 
             const version = getVersionJSON().version;
 
@@ -1631,17 +1624,16 @@ gulp.task("jsdoc", function (done) {
 
     const JSDOC_FILES = ["src/display/api.js"];
 
-    rimraf(JSDOC_BUILD_DIR, function () {
-        fs.mkdirSync(JSDOC_BUILD_DIR, {recursive: true});
+  fs.rmSync(JSDOC_BUILD_DIR, { recursive: true, force: true });
+  fs.mkdirSync(JSDOC_BUILD_DIR, { recursive: true });
 
-        const command =
-            '"node_modules/.bin/jsdoc" -d ' +
-            JSDOC_BUILD_DIR +
-            " " +
-            JSDOC_FILES.join(" ");
+  const command =
+    '"node_modules/.bin/jsdoc" -d ' +
+    JSDOC_BUILD_DIR +
+    " " +
+    JSDOC_FILES.join(" ");
 
-        exec(command, done);
-    });
+  exec(command, done);
 });
 
 gulp.task("types", function (done) {
@@ -2142,7 +2134,7 @@ gulp.task(
             const defines = {...DEFINES, GENERIC: true, TESTING: true};
             const sandboxDir = BUILD_DIR + "dev-sandbox/";
 
-            rimraf.sync(sandboxDir);
+      fs.rmSync(sandboxDir, { recursive: true, force: true });
 
             return createSandboxBundle(defines, {
                 disableVersionInfo: true,
@@ -2188,7 +2180,8 @@ gulp.task("clean", function (done) {
     console.log();
     console.log("### Cleaning up project builds");
 
-    rimraf(BUILD_DIR, done);
+  fs.rmSync(BUILD_DIR, { recursive: true, force: true });
+  done();
 });
 
 gulp.task("importl10n", async function () {
@@ -2207,7 +2200,7 @@ function ghPagesPrepare() {
     console.log();
     console.log("### Creating web site");
 
-    rimraf.sync(GH_PAGES_DIR);
+  fs.rmSync(GH_PAGES_DIR, { recursive: true, force: true });
 
     return merge([
         gulp
@@ -2321,13 +2314,20 @@ gulp.task(
             console.log();
             console.log("### Cloning baseline distribution");
 
-            rimraf.sync(DIST_DIR);
-            fs.mkdirSync(DIST_DIR, {recursive: true});
-            safeSpawnSync("git", ["clone", "--depth", "1", DIST_REPO_URL, DIST_DIR]);
+      fs.rmSync(DIST_DIR, { recursive: true, force: true });
+      fs.mkdirSync(DIST_DIR, { recursive: true });
+      safeSpawnSync("git", ["clone", "--depth", "1", DIST_REPO_URL, DIST_DIR]);
 
-            console.log();
-            console.log("### Overwriting all files");
-            rimraf.sync(path.join(DIST_DIR, "*"));
+      console.log();
+      console.log("### Overwriting all files");
+
+      // Remove all files/folders, except for `.git` because it needs to be a
+      // valid Git repository for the Git commands in the `dist` target to work.
+      for (const entry of fs.readdirSync(DIST_DIR)) {
+        if (entry !== ".git") {
+          fs.rmSync(DIST_DIR + entry, { recursive: true, force: true });
+        }
+      }
 
             return merge([
                 packageJson().pipe(gulp.dest(DIST_DIR)),
@@ -2397,16 +2397,91 @@ gulp.task(
 );
 
 gulp.task(
-    "dist-install",
-    gulp.series("dist-pre", function createDistInstall(done) {
-        let distPath = DIST_DIR;
-        const opts = {};
-        const installPath = process.env.PDFJS_INSTALL_PATH;
-        if (installPath) {
-            opts.cwd = installPath;
-            distPath = path.relative(installPath, distPath);
-        }
-        safeSpawnSync("npm", ["install", distPath], opts);
+  "dist-install",
+  gulp.series("dist-pre", function createDistInstall(done) {
+    let distPath = DIST_DIR;
+    const opts = {};
+    const installPath = process.env.PDFJS_INSTALL_PATH;
+    if (installPath) {
+      opts.cwd = installPath;
+      distPath = path.relative(installPath, distPath);
+    }
+    safeSpawnSync("npm", ["install", distPath], opts);
+    done();
+  })
+);
+
+gulp.task(
+  "dist",
+  gulp.series("dist-pre", function createDist(done) {
+    const VERSION = getVersionJSON().version;
+
+    console.log();
+    console.log("### Committing changes");
+
+    let reason = process.env.PDFJS_UPDATE_REASON;
+    // Attempt to work-around the broken link, see https://github.com/mozilla/pdf.js/issues/10391
+    if (typeof reason === "string") {
+      const reasonParts =
+        /^(See )(mozilla\/pdf\.js)@tags\/(v\d+\.\d+\.\d+)\s*$/.exec(reason);
+
+      if (reasonParts) {
+        reason =
+          reasonParts[1] +
+          "https://github.com/" +
+          reasonParts[2] +
+          "/releases/tag/" +
+          reasonParts[3];
+      }
+    }
+    const message =
+      "PDF.js version " + VERSION + (reason ? " - " + reason : "");
+    safeSpawnSync("git", ["add", "*"], { cwd: DIST_DIR });
+    safeSpawnSync("git", ["commit", "-am", message], { cwd: DIST_DIR });
+    safeSpawnSync("git", ["tag", "-a", "v" + VERSION, "-m", message], {
+      cwd: DIST_DIR,
+    });
+
+    console.log();
+    console.log("Done. Push with");
+    console.log(
+      "  cd " + DIST_DIR + "; git push --tags " + DIST_REPO_URL + " master"
+    );
+    console.log();
+    done();
+  })
+);
+
+gulp.task(
+  "mozcentralbaseline",
+  gulp.series(createBaseline, function createMozcentralBaseline(done) {
+    console.log();
+    console.log("### Creating mozcentral baseline environment");
+
+    // Create a mozcentral build.
+    fs.rmSync(BASELINE_DIR + BUILD_DIR, { recursive: true, force: true });
+
+    const workingDirectory = path.resolve(process.cwd(), BASELINE_DIR);
+    safeSpawnSync("gulp", ["mozcentral"], {
+      env: process.env,
+      cwd: workingDirectory,
+      stdio: "inherit",
+    });
+
+    // Copy the mozcentral build to the mozcentral baseline directory.
+    fs.rmSync(MOZCENTRAL_BASELINE_DIR, { recursive: true, force: true });
+    fs.mkdirSync(MOZCENTRAL_BASELINE_DIR, { recursive: true });
+
+    gulp
+      .src([BASELINE_DIR + BUILD_DIR + "mozcentral/**/*"])
+      .pipe(gulp.dest(MOZCENTRAL_BASELINE_DIR))
+      .on("end", function () {
+        // Commit the mozcentral baseline.
+        safeSpawnSync("git", ["init"], { cwd: MOZCENTRAL_BASELINE_DIR });
+        safeSpawnSync("git", ["add", "."], { cwd: MOZCENTRAL_BASELINE_DIR });
+        safeSpawnSync("git", ["commit", "-m", '"mozcentral baseline"'], {
+          cwd: MOZCENTRAL_BASELINE_DIR,
+        });
         done();
     })
 );
@@ -2416,8 +2491,18 @@ gulp.task(
     gulp.series("dist-pre", function createDist(done) {
         const VERSION = getVersionJSON().version;
 
-        console.log();
-        console.log("### Committing changes");
+      // Create the diff between the current mozcentral build and the
+      // baseline mozcentral build, which both exist at this point.
+      // Remove all files/folders, except for `.git` because it needs to be a
+      // valid Git repository for the Git commands below to work.
+      for (const entry of fs.readdirSync(MOZCENTRAL_BASELINE_DIR)) {
+        if (entry !== ".git") {
+          fs.rmSync(MOZCENTRAL_BASELINE_DIR + entry, {
+            recursive: true,
+            force: true,
+          });
+        }
+      }
 
         let reason = process.env.PDFJS_UPDATE_REASON;
         // Attempt to work-around the broken link, see https://github.com/mozilla/pdf.js/issues/10391
@@ -2536,10 +2621,10 @@ gulp.task("externaltest", function (done) {
         stdio: "inherit",
     });
 
-    console.log();
-    console.log("### Running test-fixtures_esprima.js");
-    safeSpawnSync("node", ["external/builder/test-fixtures_esprima.mjs"], {
-        stdio: "inherit",
-    });
-    done();
+  console.log();
+  console.log("### Running test-fixtures_babel.js");
+  safeSpawnSync("node", ["external/builder/test-fixtures_babel.mjs"], {
+    stdio: "inherit",
+  });
+  done();
 });

@@ -148,6 +148,27 @@ function getSelectedEditors(page) {
   });
 }
 
+async function getSpanRectFromText(page, pageNumber, text) {
+  await page.waitForSelector(
+    `.page[data-page-number="${pageNumber}"] > .textLayer .endOfContent`
+  );
+  return page.evaluate(
+    (number, content) => {
+      for (const el of document.querySelectorAll(
+        `.page[data-page-number="${number}"] > .textLayer > span`
+      )) {
+        if (el.textContent === content) {
+          const { x, y, width, height } = el.getBoundingClientRect();
+          return { x, y, width, height };
+        }
+      }
+      return null;
+    },
+    pageNumber,
+    text
+  );
+}
+
 async function waitForEvent(page, eventName, timeout = 5000) {
   const handle = await page.evaluateHandle(
     (name, timeOut) => {
@@ -291,16 +312,18 @@ function getAnnotationStorage(page) {
   );
 }
 
-function waitForEntryInStorage(page, key, value) {
+function waitForEntryInStorage(page, key, value, checker = (x, y) => x === y) {
   return page.waitForFunction(
-    (k, v) => {
+    (k, v, c) => {
       const { map } =
         window.PDFViewerApplication.pdfDocument.annotationStorage.serializable;
-      return map && JSON.stringify(map.get(k)) === v;
+      // eslint-disable-next-line no-eval
+      return map && eval(`(${c})`)(JSON.stringify(map.get(k)), v);
     },
     {},
     key,
-    JSON.stringify(value)
+    JSON.stringify(value),
+    checker.toString()
   );
 }
 
@@ -569,6 +592,7 @@ export {
   getSelectedEditors,
   getSelector,
   getSerialized,
+  getSpanRectFromText,
   hover,
   kbBigMoveDown,
   kbBigMoveLeft,

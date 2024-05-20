@@ -1030,6 +1030,20 @@ describe("api", function () {
       await pdfLoadingTask.destroy();
     });
 
+    function findNode(parent, node, index, check) {
+      if (check(node)) {
+        return [parent.children[index - 1], node];
+      }
+      for (let i = 0; i < node.children?.length ?? 0; i++) {
+        const child = node.children[i];
+        const elements = findNode(node, child, i, check);
+        if (elements) {
+          return elements;
+        }
+      }
+      return null;
+    }
+
     it("gets number of pages", function () {
       expect(pdfDocument.numPages).toEqual(3);
     });
@@ -1461,10 +1475,29 @@ describe("api", function () {
       const pdfDoc = await loadingTask.promise;
       const attachments = await pdfDoc.getAttachments();
 
-      const attachment = attachments["foo.txt"];
-      expect(attachment.filename).toEqual("foo.txt");
-      expect(attachment.content).toEqual(
-        new Uint8Array([98, 97, 114, 32, 98, 97, 122, 32, 10])
+      expect(attachments["foo.txt"]).toEqual({
+        rawFilename: "foo.txt",
+        filename: "foo.txt",
+        content: new Uint8Array([98, 97, 114, 32, 98, 97, 122, 32, 10]),
+        description: "",
+      });
+
+      await loadingTask.destroy();
+    });
+
+    it("gets attachments, with /Desc", async function () {
+      const loadingTask = getDocument(buildGetDocumentParams("issue18030.pdf"));
+      const pdfDoc = await loadingTask.promise;
+      const attachments = await pdfDoc.getAttachments();
+
+      const { rawFilename, filename, content, description } =
+        attachments["empty.pdf"];
+      expect(rawFilename).toEqual("Empty page.pdf");
+      expect(filename).toEqual("Empty page.pdf");
+      expect(content instanceof Uint8Array).toEqual(true);
+      expect(content.length).toEqual(2357);
+      expect(description).toEqual(
+        "SHA512: 06bec56808f93846f1d41ff0be4e54079c1291b860378c801c0f35f1d127a8680923ff6de59bd5a9692f01f0d97ca4f26da178ed03635fa4813d86c58a6c981a"
       );
 
       await loadingTask.destroy();
@@ -2396,7 +2429,22 @@ describe("api", function () {
       pdfDoc = await loadingTask.promise;
       const page = await pdfDoc.getPage(1);
       const tree = await page.getStructTree();
-      const leaf = tree.children[0].children[6].children[1];
+      const [predecessor, leaf] = findNode(
+        null,
+        tree,
+        0,
+        node => node.role === "Figure"
+      );
+
+      expect(predecessor).toEqual({
+        role: "Span",
+        children: [
+          {
+            type: "content",
+            id: "p3R_mc12",
+          },
+        ],
+      });
 
       expect(leaf).toEqual({
         role: "Figure",
@@ -2407,6 +2455,104 @@ describe("api", function () {
           },
         ],
         alt: "Hello World",
+      });
+
+      await loadingTask.destroy();
+    });
+
+    it("write a new stamp annotation in a tagged pdf (with some MCIDs), save and check the structure tree", async function () {
+      if (isNodeJS) {
+        pending("Cannot create a bitmap from Node.js.");
+      }
+
+      const TEST_IMAGES_PATH = "../images/";
+      const filename = "firefox_logo.png";
+      const path = new URL(TEST_IMAGES_PATH + filename, window.location).href;
+
+      const response = await fetch(path);
+      const blob = await response.blob();
+      const bitmap = await createImageBitmap(blob);
+
+      let loadingTask = getDocument(
+        buildGetDocumentParams("pdfjs_wikipedia.pdf")
+      );
+      let pdfDoc = await loadingTask.promise;
+      for (let i = 0; i < 2; i++) {
+        pdfDoc.annotationStorage.setValue(`pdfjs_internal_editor_${i}`, {
+          annotationType: AnnotationEditorType.STAMP,
+          bitmapId: `im${i}`,
+          pageIndex: 0,
+          rect: [257 + i, 572 + i, 286 + i, 603 + i],
+          rotation: 0,
+          isSvg: false,
+          structTreeParentId: "p2R_mc155",
+          accessibilityData: {
+            type: "Figure",
+            alt: `Firefox logo ${i}`,
+          },
+          bitmap: structuredClone(bitmap),
+        });
+      }
+
+      const data = await pdfDoc.saveDocument();
+      await loadingTask.destroy();
+
+      loadingTask = getDocument(data);
+      pdfDoc = await loadingTask.promise;
+      const page = await pdfDoc.getPage(1);
+      const tree = await page.getStructTree();
+
+      let [predecessor, figure] = findNode(
+        null,
+        tree,
+        0,
+        node => node.role === "Figure" && node.alt === "Firefox logo 1"
+      );
+      expect(predecessor).toEqual({
+        role: "NonStruct",
+        children: [
+          {
+            type: "content",
+            id: "p2R_mc155",
+          },
+        ],
+      });
+      expect(figure).toEqual({
+        role: "Figure",
+        children: [
+          {
+            type: "annotation",
+            id: "pdfjs_internal_id_420R",
+          },
+        ],
+        alt: "Firefox logo 1",
+      });
+
+      [predecessor, figure] = findNode(
+        null,
+        tree,
+        0,
+        node => node.role === "Figure" && node.alt === "Firefox logo 0"
+      );
+      expect(predecessor).toEqual({
+        role: "Figure",
+        children: [
+          {
+            type: "annotation",
+            id: "pdfjs_internal_id_420R",
+          },
+        ],
+        alt: "Firefox logo 1",
+      });
+      expect(figure).toEqual({
+        role: "Figure",
+        children: [
+          {
+            type: "annotation",
+            id: "pdfjs_internal_id_416R",
+          },
+        ],
+        alt: "Firefox logo 0",
       });
 
       await loadingTask.destroy();
@@ -2982,10 +3128,11 @@ describe("api", function () {
     });
 
     it("gets text content", async function () {
-      const { items, styles } = await page.getTextContent();
+      const { items, styles, lang } = await page.getTextContent();
 
       expect(items.length).toEqual(15);
       expect(objectSize(styles)).toEqual(5);
+      expect(lang).toEqual("en");
 
       const text = mergeText(items);
       expect(text).toEqual(`Table Of Content
@@ -3000,13 +3147,14 @@ page 1 / 3`);
       );
       const pdfDoc = await loadingTask.promise;
       const pdfPage = await pdfDoc.getPage(1);
-      const { items, styles } = await pdfPage.getTextContent({
+      const { items, styles, lang } = await pdfPage.getTextContent({
         disableNormalization: true,
       });
       expect(items.length).toEqual(1);
       // Font name will be a random object id.
       const fontName = items[0].fontName;
       expect(Object.keys(styles)).toEqual([fontName]);
+      expect(lang).toEqual(null);
 
       expect(items[0]).toEqual({
         dir: "ltr",
@@ -4053,6 +4201,65 @@ Caron Broadcasting, Inc., an Ohio corporation (“Lessee”).`)
 
       await loadingTask.destroy();
       firstStatsOverall = null;
+    });
+
+    it("caches image resources at the document/page level, with corrupt images (issue 18042)", async function () {
+      const { NUM_PAGES_THRESHOLD } = GlobalImageCache;
+
+      const loadingTask = getDocument(buildGetDocumentParams("issue18042.pdf"));
+      const pdfDoc = await loadingTask.promise;
+      let checkedGlobalDecodeFailed = false;
+
+      for (let i = 1; i <= pdfDoc.numPages; i++) {
+        const pdfPage = await pdfDoc.getPage(i);
+        const viewport = pdfPage.getViewport({ scale: 1 });
+
+        const canvasAndCtx = CanvasFactory.create(
+          viewport.width,
+          viewport.height
+        );
+        const renderTask = pdfPage.render({
+          canvasContext: canvasAndCtx.context,
+          viewport,
+        });
+
+        await renderTask.promise;
+        const opList = renderTask.getOperatorList();
+        // The canvas is no longer necessary, since we only care about
+        // the image-data below.
+        CanvasFactory.destroy(canvasAndCtx);
+
+        const { commonObjs, objs } = pdfPage;
+        const imgIndex = opList.fnArray.indexOf(OPS.paintImageXObject);
+        const [objId] = opList.argsArray[imgIndex];
+
+        if (i < NUM_PAGES_THRESHOLD) {
+          expect(objId).toEqual(`img_p${i - 1}_1`);
+
+          expect(objs.has(objId)).toEqual(true);
+          expect(commonObjs.has(objId)).toEqual(false);
+        } else {
+          expect(objId).toEqual(
+            `g_${loadingTask.docId}_img_p${NUM_PAGES_THRESHOLD - 1}_1`
+          );
+
+          expect(objs.has(objId)).toEqual(false);
+          expect(commonObjs.has(objId)).toEqual(true);
+        }
+
+        // Ensure that the actual image data is identical for all pages.
+        const objsPool = i >= NUM_PAGES_THRESHOLD ? commonObjs : objs;
+        const imgData = objsPool.get(objId);
+
+        expect(imgData).toBe(null);
+
+        if (i === NUM_PAGES_THRESHOLD) {
+          checkedGlobalDecodeFailed = true;
+        }
+      }
+      expect(checkedGlobalDecodeFailed).toBeTruthy();
+
+      await loadingTask.destroy();
     });
 
     it("render for printing, with `printAnnotationStorage` set", async function () {

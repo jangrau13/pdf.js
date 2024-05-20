@@ -38,13 +38,17 @@ import {
     warn,
 } from "../shared/util.js";
 import {
-    collectActions,
-    escapeString,
-    getInheritableProperty,
-    getRotationMatrix,
-    isAscii,
-    numberToString,
-    stringToUTF16String,
+  collectActions,
+  escapeString,
+  getInheritableProperty,
+  getRotationMatrix,
+  isAscii,
+  isNumberArray,
+  lookupMatrix,
+  lookupNormalRect,
+  lookupRect,
+  numberToString,
+  stringToUTF16String,
 } from "./core_utils.js";
 import {
     createDefaultAppearance,
@@ -608,16 +612,16 @@ function getPdfColorArray(color) {
 }
 
 function getQuadPoints(dict, rect) {
-    // The region is described as a number of quadrilaterals.
-    // Each quadrilateral must consist of eight coordinates.
-    const quadPoints = dict.getArray("QuadPoints");
-    if (
-        !Array.isArray(quadPoints) ||
-        quadPoints.length === 0 ||
-        quadPoints.length % 8 > 0
-    ) {
-        return null;
-    }
+  // The region is described as a number of quadrilaterals.
+  // Each quadrilateral must consist of eight coordinates.
+  const quadPoints = dict.getArray("QuadPoints");
+  if (
+    !isNumberArray(quadPoints, null) ||
+    quadPoints.length === 0 ||
+    quadPoints.length % 8 > 0
+  ) {
+    return null;
+  }
 
     const quadPointsLists = [];
     for (let i = 0, ii = quadPoints.length / 8; i < ii; i++) {
@@ -968,19 +972,16 @@ class Annotation {
         return this._hasFlag(this.flags, flag);
     }
 
-    /**
-     * Set the rectangle.
-     *
-     * @public
-     * @memberof Annotation
-     * @param {Array} rectangle - The rectangle array with exactly four entries
-     */
-    setRectangle(rectangle) {
-        this.rectangle =
-            Array.isArray(rectangle) && rectangle.length === 4
-                ? Util.normalizeRect(rectangle)
-                : [0, 0, 0, 0];
-    }
+  /**
+   * Set the rectangle.
+   *
+   * @public
+   * @memberof Annotation
+   * @param {Array} rectangle - The rectangle array with exactly four entries
+   */
+  setRectangle(rectangle) {
+    this.rectangle = lookupNormalRect(rectangle, [0, 0, 0, 0]);
+  }
 
     /**
      * Set the color and take care of color space conversion.
@@ -1198,14 +1199,17 @@ class Annotation {
             appearance.dict = new Dict();
         }
 
-        const appearanceDict = appearance.dict;
-        const resources = await this.loadResources(
-            ["ExtGState", "ColorSpace", "Pattern", "Shading", "XObject", "Font"],
-            appearance
-        );
-        const bbox = appearanceDict.getArray("BBox") || [0, 0, 1, 1];
-        const matrix = appearanceDict.getArray("Matrix") || [1, 0, 0, 1, 0, 0];
-        const transform = getTransformMatrix(data.rect, bbox, matrix);
+    const appearanceDict = appearance.dict;
+    const resources = await this.loadResources(
+      ["ExtGState", "ColorSpace", "Pattern", "Shading", "XObject", "Font"],
+      appearance
+    );
+    const bbox = lookupRect(appearanceDict.getArray("BBox"), [0, 0, 1, 1]);
+    const matrix = lookupMatrix(
+      appearanceDict.getArray("Matrix"),
+      IDENTITY_MATRIX
+    );
+    const transform = getTransformMatrix(rect, bbox, matrix);
 
         const opList = new OperatorList();
 
@@ -1299,16 +1303,19 @@ class Annotation {
             text.push(buffer.join("").trimEnd());
         }
 
-        if (text.length > 1 || text[0]) {
-            const appearanceDict = this.appearance.dict;
-            this.data.textPosition = this._transformPoint(
-                firstPosition,
-                appearanceDict.getArray("BBox"),
-                appearanceDict.getArray("Matrix")
-            );
-            this.data.textContent = text;
-        }
+    if (text.length > 1 || text[0]) {
+      const appearanceDict = this.appearance.dict;
+      const bbox = lookupRect(appearanceDict.getArray("BBox"), null);
+      const matrix = lookupMatrix(appearanceDict.getArray("Matrix"), null);
+
+      this.data.textPosition = this._transformPoint(
+        firstPosition,
+        bbox,
+        matrix
+      );
+      this.data.textContent = text;
     }
+  }
 
     _transformPoint(coords, bbox, matrix) {
         const {rect} = this.data;
@@ -1443,21 +1450,21 @@ class AnnotationBorderStyle {
         this.verticalCornerRadius = 0;
     }
 
-    /**
-     * Set the width.
-     *
-     * @public
-     * @memberof AnnotationBorderStyle
-     * @param {number} width - The width.
-     * @param {Array} rect - The annotation `Rect` entry.
-     */
-    setWidth(width, rect = [0, 0, 0, 0]) {
-        if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
-            assert(
-                Array.isArray(rect) && rect.length === 4,
-                "A valid `rect` parameter must be provided."
-            );
-        }
+  /**
+   * Set the width.
+   *
+   * @public
+   * @memberof AnnotationBorderStyle
+   * @param {number} width - The width.
+   * @param {Array} rect - The annotation `Rect` entry.
+   */
+  setWidth(width, rect = [0, 0, 0, 0]) {
+    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+      assert(
+        isNumberArray(rect, 4),
+        "A valid `rect` parameter must be provided."
+      );
+    }
 
         // Some corrupt PDF generators may provide the width as a `Name`,
         // rather than as a number (fixes issue 10385).
@@ -3030,12 +3037,15 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
                 : this.data.fieldValue === this.data.buttonValue;
         }
 
-        const appearance = value
-            ? this.checkedAppearance
-            : this.uncheckedAppearance;
-        if (appearance) {
-            const savedAppearance = this.appearance;
-            const savedMatrix = appearance.dict.getArray("Matrix") || IDENTITY_MATRIX;
+    const appearance = value
+      ? this.checkedAppearance
+      : this.uncheckedAppearance;
+    if (appearance) {
+      const savedAppearance = this.appearance;
+      const savedMatrix = lookupMatrix(
+        appearance.dict.getArray("Matrix"),
+        IDENTITY_MATRIX
+      );
 
             if (rotation) {
                 appearance.dict.set(
@@ -3795,17 +3805,12 @@ class PopupAnnotation extends Annotation {
             this.data.rect = null;
         }
 
-        let parentItem = dict.get("Parent");
-        if (!parentItem) {
-            warn("Popup annotation has a missing or invalid parent annotation.");
-            return;
-        }
-
-        const parentRect = parentItem.getArray("Rect");
-        this.data.parentRect =
-            Array.isArray(parentRect) && parentRect.length === 4
-                ? Util.normalizeRect(parentRect)
-                : null;
+    let parentItem = dict.get("Parent");
+    if (!parentItem) {
+      warn("Popup annotation has a missing or invalid parent annotation.");
+      return;
+    }
+    this.data.parentRect = lookupNormalRect(parentItem.getArray("Rect"), null);
 
         const rt = parentItem.get("RT");
         if (isName(rt, AnnotationReplyType.GROUP)) {
@@ -4093,8 +4098,8 @@ class LineAnnotation extends MarkupAnnotation {
         this.data.hasOwnCanvas = this.data.noRotate;
         this.data.noHTML = false;
 
-        const lineCoordinates = dict.getArray("L");
-        this.data.lineCoordinates = Util.normalizeRect(lineCoordinates);
+    const lineCoordinates = lookupRect(dict.getArray("L"), [0, 0, 0, 0]);
+    this.data.lineCoordinates = Util.normalizeRect(lineCoordinates);
 
         if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
             this.setLineEndings(dict.getArray("LE"));
@@ -4284,19 +4289,19 @@ class PolylineAnnotation extends MarkupAnnotation {
             this.data.lineEndings = this.lineEndings;
         }
 
-        // The vertices array is an array of numbers representing the alternating
-        // horizontal and vertical coordinates, respectively, of each vertex.
-        // Convert this to an array of objects with x and y coordinates.
-        const rawVertices = dict.getArray("Vertices");
-        if (!Array.isArray(rawVertices)) {
-            return;
-        }
-        for (let i = 0, ii = rawVertices.length; i < ii; i += 2) {
-            this.data.vertices.push({
-                x: rawVertices[i],
-                y: rawVertices[i + 1],
-            });
-        }
+    // The vertices array is an array of numbers representing the alternating
+    // horizontal and vertical coordinates, respectively, of each vertex.
+    // Convert this to an array of objects with x and y coordinates.
+    const rawVertices = dict.getArray("Vertices");
+    if (!isNumberArray(rawVertices, null)) {
+      return;
+    }
+    for (let i = 0, ii = rawVertices.length; i < ii; i += 2) {
+      this.data.vertices.push({
+        x: rawVertices[i],
+        y: rawVertices[i + 1],
+      });
+    }
 
         if (!this.appearance) {
             // The default stroke color is black.
@@ -4367,23 +4372,27 @@ class InkAnnotation extends MarkupAnnotation {
         this.data.annotationType = AnnotationType.INK;
         this.data.inkLists = [];
 
-        const rawInkLists = dict.getArray("InkList");
-        if (!Array.isArray(rawInkLists)) {
-            return;
+    const rawInkLists = dict.getArray("InkList");
+    if (!Array.isArray(rawInkLists)) {
+      return;
+    }
+    for (let i = 0, ii = rawInkLists.length; i < ii; ++i) {
+      // The raw ink lists array contains arrays of numbers representing
+      // the alternating horizontal and vertical coordinates, respectively,
+      // of each vertex. Convert this to an array of objects with x and y
+      // coordinates.
+      this.data.inkLists.push([]);
+      if (!Array.isArray(rawInkLists[i])) {
+        continue;
+      }
+      for (let j = 0, jj = rawInkLists[i].length; j < jj; j += 2) {
+        const x = xref.fetchIfRef(rawInkLists[i][j]),
+          y = xref.fetchIfRef(rawInkLists[i][j + 1]);
+        if (typeof x === "number" && typeof y === "number") {
+          this.data.inkLists[i].push({ x, y });
         }
-        for (let i = 0, ii = rawInkLists.length; i < ii; ++i) {
-            // The raw ink lists array contains arrays of numbers representing
-            // the alternating horizontal and vertical coordinates, respectively,
-            // of each vertex. Convert this to an array of objects with x and y
-            // coordinates.
-            this.data.inkLists.push([]);
-            for (let j = 0, jj = rawInkLists[i].length; j < jj; j += 2) {
-                this.data.inkLists[i].push({
-                    x: xref.fetchIfRef(rawInkLists[i][j]),
-                    y: xref.fetchIfRef(rawInkLists[i][j + 1]),
-                });
-            }
-        }
+      }
+    }
 
         if (!this.appearance) {
             // The default stroke color is black.

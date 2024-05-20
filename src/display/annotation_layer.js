@@ -907,24 +907,27 @@ class LinkAnnotationElement extends AnnotationElement {
         this.#setInternalLink();
     }
 
-    /**
-     * Bind attachments to the link element.
-     * @param {Object} link
-     * @param {Object} attachment
-     * @param {str} [dest]
-     */
-    #bindAttachment(link, attachment, dest = null) {
-        link.href = this.linkService.getAnchorUrl("");
-        link.onclick = () => {
-            this.downloadManager?.openOrDownloadData(
-                attachment.content,
-                attachment.filename,
-                dest
-            );
-            return false;
-        };
-        this.#setInternalLink();
+  /**
+   * Bind attachments to the link element.
+   * @param {Object} link
+   * @param {Object} attachment
+   * @param {str} [dest]
+   */
+  #bindAttachment(link, attachment, dest = null) {
+    link.href = this.linkService.getAnchorUrl("");
+    if (attachment.description) {
+      link.title = attachment.description;
     }
+    link.onclick = () => {
+      this.downloadManager?.openOrDownloadData(
+        attachment.content,
+        attachment.filename,
+        dest
+      );
+      return false;
+    };
+    this.#setInternalLink();
+  }
 
     /**
      * Bind SetOCGState actions to the link element.
@@ -2919,16 +2922,15 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
     constructor(parameters) {
         super(parameters, {isRenderable: true});
 
-        const {filename, content} = this.data.file;
-        this.filename = getFilenameFromUrl(filename, /* onlyStripPath = */ true);
-        this.content = content;
+    const { file } = this.data;
+    this.filename = file.filename;
+    this.content = file.content;
 
-        this.linkService.eventBus?.dispatch("fileattachmentannotation", {
-            source: this,
-            filename,
-            content,
-        });
-    }
+    this.linkService.eventBus?.dispatch("fileattachmentannotation", {
+      source: this,
+      ...file,
+    });
+  }
 
     render() {
         this.container.classList.add("fileAttachmentAnnotation");
