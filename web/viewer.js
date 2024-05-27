@@ -281,10 +281,12 @@ class Modal {
                     const content = e.data.content;
                     const infoToLookFor = e.data.infoToLookFor;
                     const potentialSubject = e.data.potentialSubject;
+                    const laScript = e.data.laScript;
                     WiserEventBus.emit(magicWord, {
                         content,
                         infoToLookFor,
-                        potentialSubject
+                        potentialSubject,
+                        laScript
                     });
                     break;
                 case "conceptButtons":

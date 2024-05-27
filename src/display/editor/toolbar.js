@@ -277,7 +277,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
         async render(myWorker) {
             const magicWord = 'magic_onSave_' + new Date().toISOString();
             const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
-            const renderURL = 'https://wiser-atomic.tunnelto.dev/collections/ontology/concept/class/' + current_concept
+            const renderURL = 'https://wiser-sp4.interactions.ics.unisg.ch/class/' + current_concept
             appliedConcept = renderURL
 
             myWorker.postMessage({
@@ -302,7 +302,13 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
                     container.className = "wiserModal";
 
                     container.innerHTML = myDiv;
-
+                    if(currentMessage.laScript){
+                        //add additional script to the DOM
+                        const scriptElement = document.createElement("script")
+                        scriptElement.type = "text/javascript"; // Ensure the script type is set
+                        scriptElement.textContent = currentMessage.laScript
+                        document.body.appendChild(scriptElement)
+                    }
                     // Append the container to the document body or a specific element
                     resolve(container.outerHTML);
                 };
@@ -322,7 +328,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
                 .setAttribute('data-wiser-type', current_concept)
             for(const infoIndex of infoToLookFor){
                 const importantInfo = document.getElementById(infoIndex)
-                if(infoIndex === "https://wiser-atomic.tunnelto.dev/property/th1piubjse"){
+                if(infoIndex === "https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-id"){
                     container.setId(importantInfo.value)
                     container.setAttribute('data-wiser-potential-subject', potentialSubject)
                 }else{
@@ -349,14 +355,12 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
             // Execute the highlight action if needed
             uiManager.highlightSelection("floating_button");
 
-
             // remove the highlight state from the tool
             uiManager._eventBus.dispatch("switchannotationeditormode",
                 {
                     source: this,
                     mode: 0,
                 });
-
 
         },
 

@@ -648,7 +648,7 @@ class AnnotationElement {
                         break;
                     }
                 }
-                if(!msg.content){
+                if (!msg.content) {
                     linkHeaderDiv.style.display = 'none'
                 }
             })
@@ -907,27 +907,27 @@ class LinkAnnotationElement extends AnnotationElement {
         this.#setInternalLink();
     }
 
-  /**
-   * Bind attachments to the link element.
-   * @param {Object} link
-   * @param {Object} attachment
-   * @param {str} [dest]
-   */
-  #bindAttachment(link, attachment, dest = null) {
-    link.href = this.linkService.getAnchorUrl("");
-    if (attachment.description) {
-      link.title = attachment.description;
+    /**
+     * Bind attachments to the link element.
+     * @param {Object} link
+     * @param {Object} attachment
+     * @param {str} [dest]
+     */
+    #bindAttachment(link, attachment, dest = null) {
+        link.href = this.linkService.getAnchorUrl("");
+        if (attachment.description) {
+            link.title = attachment.description;
+        }
+        link.onclick = () => {
+            this.downloadManager?.openOrDownloadData(
+                attachment.content,
+                attachment.filename,
+                dest
+            );
+            return false;
+        };
+        this.#setInternalLink();
     }
-    link.onclick = () => {
-      this.downloadManager?.openOrDownloadData(
-        attachment.content,
-        attachment.filename,
-        dest
-      );
-      return false;
-    };
-    this.#setInternalLink();
-  }
 
     /**
      * Bind SetOCGState actions to the link element.
@@ -2366,13 +2366,16 @@ class PopupElement {
     _formatContents({str, dir}) {
         const p = document.createElement("p");
         p.classList.add("popupContent");
+        console.log("contents", str);
         p.dir = dir;
-        const lines = str.split(/(?:\r\n?|\n)/);
-        for (let i = 0, ii = lines.length; i < ii; ++i) {
-            const line = lines[i];
-            p.append(document.createTextNode(line));
-            if (i < ii - 1) {
-                p.append(document.createElement("br"));
+        if (str) {
+            const lines = str.split(/(?:\r\n?|\n)/);
+            for (let i = 0, ii = lines.length; i < ii; ++i) {
+                const line = lines[i];
+                p.append(document.createTextNode(line));
+                if (i < ii - 1) {
+                    p.append(document.createElement("br"));
+                }
             }
         }
         return p;
@@ -2833,13 +2836,28 @@ class HighlightAnnotationElement extends AnnotationElement {
         });
     }
 
+    hexToRgba(hex, alpha) {
+        // Remove the hash at the start if it's there
+        hex = hex.replace(/^#/, '');
+
+        // Parse r, g, b values
+        let r = parseInt(hex.substring(0, 2), 16);
+        let g = parseInt(hex.substring(2, 4), 16);
+        let b = parseInt(hex.substring(4, 6), 16);
+
+        // Create the rgba color string
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
     render() {
         if (!this.data.popupRef && this.hasPopupData) {
             this._createPopup();
         }
         this.container.classList.add("highlightAnnotation");
-        console.log("can I hide this?", this.container)
-        this.container.style.display = 'none'
+        let color = this.data.color;
+        let hexColor = Util.makeHexColor(color[0], color[1], color[2]);
+        let rgbaColor = this.hexToRgba(hexColor, 0.25);
+        this.container.style.backgroundColor = rgbaColor;
         return this.container;
     }
 }
@@ -2857,7 +2875,6 @@ class UnderlineAnnotationElement extends AnnotationElement {
         if (!this.data.popupRef && this.hasPopupData) {
             this._createPopup();
         }
-
         this.container.classList.add("underlineAnnotation");
         return this.container;
     }
@@ -2922,15 +2939,15 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
     constructor(parameters) {
         super(parameters, {isRenderable: true});
 
-    const { file } = this.data;
-    this.filename = file.filename;
-    this.content = file.content;
+        const {file} = this.data;
+        this.filename = file.filename;
+        this.content = file.content;
 
-    this.linkService.eventBus?.dispatch("fileattachmentannotation", {
-      source: this,
-      ...file,
-    });
-  }
+        this.linkService.eventBus?.dispatch("fileattachmentannotation", {
+            source: this,
+            ...file,
+        });
+    }
 
     render() {
         this.container.classList.add("fileAttachmentAnnotation");

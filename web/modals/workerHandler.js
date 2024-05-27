@@ -20,7 +20,6 @@ export async function handleUpdatePDFAfterKGAdd(data, document){
 
     const updatedList = data.updatedElements
 
-    console.log("those were really updated", updatedList)
     // change from potential subject to tried subject
     for (const changeCandidate of potentialSaveCandidates) {
         const subject = changeCandidate.getAttribute("data-wiser-potential-subject")
@@ -38,4 +37,6 @@ export async function handleUpdatePDFAfterKGAdd(data, document){
     // trigger the saving in the lame way
     const savePDFButton = document.getElementById("download")
     savePDFButton.click()
+
+    wiserEventBus.emit('knowledgeConfirmation',{updatedList})
 }
