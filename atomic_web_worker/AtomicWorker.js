@@ -371,7 +371,7 @@ onmessage = async (e) => {
 async function init() {
     const serverURL = "https://wiser-sp4.interactions.ics.unisg.ch";
     await store.setServerUrl(serverURL);
-    await store.preloadPropsAndClasses();
+    //await store.preloadPropsAndClasses();
     await store.setAgent(myAgent);
     console.log("Atomic Worker: Store initialized successfully");
 }
