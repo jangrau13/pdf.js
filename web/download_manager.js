@@ -56,7 +56,7 @@ function saveToServer(blob, filename, savingDone) {
     const formData = new FormData();
     formData.append('file', blob, filename);
 
-    fetch('/api/pdf', {
+    fetch('/v1/api/pdf', {
         method,
         body: formData
     }).then(response => {

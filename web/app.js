@@ -635,7 +635,7 @@ const PDFViewerApplication = {
       const pdfID = document.getElementById("pdf_id").dataset.id;
       //file = params.get("file") ?? AppOptions.get("defaultUrl");
       if(pdfID.length > 1){
-        file = "/pdf_files/pdf/" + pdfID + ".pdf"
+        file = "/v1/api/pdf_files/pdf/" + pdfID + ".pdf"
         validateFileURL(file);
       }
 

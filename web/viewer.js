@@ -227,7 +227,7 @@ if (
 ) {
 
     //add by Jan
-    window.myAtomicWorker = new Worker("/pdf_api/js/atomic.worker.js")
+    window.myAtomicWorker = new Worker("/v1/api/pdf_api/js/atomic.worker.js")
     window.WiserEventBus = WiserEventBus
 
     /*

@@ -608,6 +608,7 @@ class AnnotationElement {
      * @memberof AnnotationElement
      */
     _createPopup() {
+        let magicWord;
         const {container, data} = this;
         container.setAttribute("aria-haspopup", "dialog");
 
@@ -626,7 +627,7 @@ class AnnotationElement {
             const actualType = typeOfElement.getAttribute("data-wiser-type")
             const resource = typeOfElement.getAttribute("data-wiser-subject")
             // check whether the annotation is still in the store
-            const magicWord = "magic_word_" + new Date().toISOString()
+            magicWord = "magic_word_" + new Date().toISOString()
             window.myAtomicWorker.postMessage({
                 type: 'ping',
                 magic: magicWord,
@@ -634,24 +635,12 @@ class AnnotationElement {
             });
             const linkHeaderHTML = document.createElement("div")
             linkHeaderHTML.id = magicWord
+            console.log('magicWord', magicWord);
             const linkHeaderSpan = document.createElement("a")
             linkHeaderSpan.setAttribute("href", resource)
-            linkHeaderSpan.textContent = "visit me at the KG"
+            linkHeaderSpan.textContent = "please visit me at the KG"
             linkHeaderHTML.appendChild(linkHeaderSpan)
-            wiserEventBus.on(magicWord, (msg) => {
-                const startTime = Date.now();
-                let linkHeaderDiv;
-                // at best very hacky :)
-                while ((Date.now() - startTime) < 2000) {
-                    linkHeaderDiv = document.getElementById(magicWord);
-                    if (linkHeaderDiv) {
-                        break;
-                    }
-                }
-                if (!msg.content) {
-                    linkHeaderDiv.style.display = 'none'
-                }
-            })
+
 
             if (resource) {
                 data.titleObj.link = linkHeaderHTML
@@ -682,9 +671,24 @@ class AnnotationElement {
             parent: this.parent,
             elements: [this],
         });
-
-        this.parent.div.append(popup.render());
-
+        let popup_render = popup.render()
+        console.log("I am now appinding this", popup_render)
+        //TODO: why is this rendering this bad?
+        this.parent.div.append(popup_render);
+        wiserEventBus.on(magicWord, (msg) => {
+            const startTime = Date.now();
+            let linkHeaderDiv;
+            // at best very hacky :)
+            while ((Date.now() - startTime) < 2000) {
+                linkHeaderDiv = document.getElementById(magicWord);
+                if (linkHeaderDiv) {
+                    break;
+                }
+            }
+            if (!msg.content) {
+                linkHeaderDiv.style.display = 'none'
+            }
+        })
     }
 
     /**
@@ -2144,7 +2148,7 @@ class PopupAnnotationElement extends AnnotationElement {
             "aria-controls",
             elementIds.map(id => `${AnnotationPrefix}${id}`).join(",")
         );
-
+        console.log("returning container", this.container)
         return this.container;
     }
 }
@@ -2366,7 +2370,6 @@ class PopupElement {
     _formatContents({str, dir}) {
         const p = document.createElement("p");
         p.classList.add("popupContent");
-        console.log("contents", str);
         p.dir = dir;
         if (str) {
             const lines = str.split(/(?:\r\n?|\n)/);

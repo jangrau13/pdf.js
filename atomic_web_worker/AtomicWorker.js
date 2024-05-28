@@ -343,6 +343,7 @@ onmessage = async (e) => {
                 return;
             }
             const gotRes = await store.checkSubjectTaken(message.url)
+
             postMessage({
                 type: 'pong',
                 magic: message.magic,
