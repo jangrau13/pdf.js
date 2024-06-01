@@ -635,12 +635,10 @@ class AnnotationElement {
             });
             const linkHeaderHTML = document.createElement("div")
             linkHeaderHTML.id = magicWord
-            console.log('magicWord', magicWord);
             const linkHeaderSpan = document.createElement("a")
             linkHeaderSpan.setAttribute("href", resource)
             linkHeaderSpan.textContent = "please visit me at the KG"
             linkHeaderHTML.appendChild(linkHeaderSpan)
-
 
             if (resource) {
                 data.titleObj.link = linkHeaderHTML
@@ -672,7 +670,6 @@ class AnnotationElement {
             elements: [this],
         });
         let popup_render = popup.render()
-        console.log("I am now appinding this", popup_render)
         //TODO: why is this rendering this bad?
         this.parent.div.append(popup_render);
         wiserEventBus.on(magicWord, (msg) => {
@@ -2148,7 +2145,6 @@ class PopupAnnotationElement extends AnnotationElement {
             "aria-controls",
             elementIds.map(id => `${AnnotationPrefix}${id}`).join(",")
         );
-        console.log("returning container", this.container)
         return this.container;
     }
 }

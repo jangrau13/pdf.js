@@ -2,11 +2,7 @@ import {Agent, core, Resource, Store, CollectionBuilder} from "@tomic/lib";
 import * as cheerio from 'cheerio';
 
 const store = new Store();
-const myAgent = new Agent(
-    // gönnet eu de key, isch leider nur en Testuser, sorry
-    "rEdi8xEOMiTQPsNKa9cHr5GoNDMJ5hcUlm9WHKDaKUc=",
-    "https://wiser-sp4.interactions.ics.unisg.ch/agents/KA+r8Uki9vD3dE/KNxR7exHG9ZEloH9nXP4vNjO3RMo=",
-);
+let myAgent;
 
 function slugify(text) {
     return text
@@ -67,37 +63,82 @@ function getRandomColor() {
     return color;
 }
 
+function delay(time) {
+    return new Promise(resolve => setTimeout(resolve, time));
+}
+
 async function handleRetrieveConcepts() {
-    const concepts = await store.getResourceAsync(myAgent.subject)
+    await delay(500);
+    const concepts = await store.getResourceAsync(myAgent.subject);
     const classes = concepts.get("https://wiser-sp4.interactions.ics.unisg.ch/property/knows-concepts");
-    let buttons = []
-    for (const buttonClass in classes) {
-        const myFullClass = await store.getResourceAsync(classes[buttonClass])
+
+    let buttonGroups = {};
+
+    let buttonHTML = '<div class="bossButton">\n'
+
+    for (const buttonClass of classes) {
+
+        const myFullClass = await store.getResourceAsync(buttonClass);
         const shortname = myFullClass.get("https://atomicdata.dev/properties/shortname");
-        let color = myFullClass.get("https://atomicdata.dev/properties/color")
+        let color = myFullClass.get("https://atomicdata.dev/properties/color");
+        const parentUrl = myFullClass.get("https://atomicdata.dev/properties/parent").toString();
+        const parentRes = await store.getResourceAsync(parentUrl);
+        const parent = parentRes.get("https://atomicdata.dev/properties/name");
+        const description = myFullClass.get("https://atomicdata.dev/properties/description");
+
         if (!color) {
             color = getRandomColor();
         }
         color = hexToRgba(color, 0.5);
-        const complementaryColor = getComplementaryColor(color)
-
-        const htmlButton = (shortname, color, complementaryColor) => `
+        const complementaryColor = getComplementaryColor(color);
+        let myButtonConcept = buttonClass.toString();
+        const htmlButton = (shortname, color, complementaryColor, description, myButtonConcept) => `
             <button 
                 style="background-color: ${color}; color: ${complementaryColor}; border: 2px solid ${complementaryColor}; font-weight: bold;" 
-                onclick="conceptButtonFunction('${shortname}', '${color}')">
+                onclick="conceptButtonFunction('${shortname}', '${color}', '${myButtonConcept}')" 
+                title="${description}">
                 ${shortname}
             </button>
         `;
 
-        buttons.push(
-            htmlButton(shortname, color, complementaryColor).trim()
-        )
+        if (!buttonGroups[parent]) {
+            buttonGroups[parent] = [];
+        }
+        buttonGroups[parent].push(htmlButton(shortname, color, complementaryColor, description, myButtonConcept).trim());
     }
+
+    let groupedButtons = Object.entries(buttonGroups).map(([parent, buttons]) => `
+        <div class="babyBossButton">
+            <button class="collapsible">${parent}</button>
+            <div class="collapsible-content" style="display: none;">
+                ${buttons.join('\n')}
+            </div>
+        </div>
+    `).join('\n');
+
+    buttonHTML += groupedButtons + '\n</div>'
 
     postMessage({
         type: 'conceptButtons',
-        buttons
-    })
+        buttons: buttonHTML
+    });
+}
+
+
+async function handleCheckbox(myVisual, container, infoToLookFor) {
+    const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
+    const inputInfos = await store.getResourceAsync(inputFor);
+    const label = inputInfos.get("https://atomicdata.dev/properties/description");
+    infoToLookFor.push(inputFor);
+
+    container += `
+        <div style="display: grid; grid-template-columns: 1fr; grid-gap: 8px;">
+            <label for="${inputFor}">${label}</label>
+            <input type="checkbox" name="${inputFor}" id="${inputFor}" data-value="false">
+        </div>
+    `;
+
+    return container;
 }
 
 async function handleTextArea(myVisual, container, selectedText = '', infoToLookFor) {
@@ -126,18 +167,144 @@ async function handleTextArea(myVisual, container, selectedText = '', infoToLook
     return container;
 }
 
+async function handleImageInserter(myVisual, container, selectedText, infoToLookFor) {
+    const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
+    const individualID = inputFor;
+    infoToLookFor.push(inputFor);
+
+    let dropdown = `
+        <div class="wiserModal">
+            <label for="${inputFor}" class="textInfo">Image Inserter</label>
+            <div class="pasteArea" id="${individualID}">Paste your image here (Ctrl + V)</div>
+            <label for="${inputFor}-description" class="textInfo">Image Description</label>
+            <textarea id="${inputFor}-description" class="textareaField" placeholder="Enter image description here..."></textarea>
+        </div>
+    `;
+
+    // Add the dropdown to the container
+    container += dropdown;
+
+    // JavaScript code as a string
+    const laScript = `
+function waitForElement(id, callback) {
+    const observer = new MutationObserver((mutations) => {
+        for (let mutation of mutations) {
+            if (mutation.type === 'childList') {
+                const element = document.getElementById(id);
+                if (element) {
+                    observer.disconnect();
+                    callback(element);
+                }
+            }
+        }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Check if the element already exists
+    const element = document.getElementById(id);
+    if (element) {
+        observer.disconnect();
+        callback(element);
+    }
+}
+
+waitForElement('${individualID}', (element) => {
+    element.addEventListener('paste', async (event) => {
+        
+        // Prevent the default paste behavior
+        event.preventDefault();
+        // Get the items from the clipboard
+        const items = event.clipboardData.items;
+
+        // Loop through the clipboard items
+        for (const item of items) {
+            // Check if the item is an image
+            if (item.type.startsWith('image/')) {
+                // Get the image file as a blob
+                const blob = item.getAsFile();
+
+                // Create a FileReader to read the image file
+                const reader = new FileReader();
+
+                // Define what happens when the reader loads the file
+                reader.onload = (e) => {
+                    // The result is a base64 encoded data URL
+                    const base64Data = e.target.result;
+                    
+                    // Set the base64 data URL as a data attribute on the div
+                    element.setAttribute('data-image', base64Data);
+                    element.setAttribute('id', "${inputFor}");
+                    
+                    // Change the div text to indicate success
+                    element.textContent = 'Image Pasted!';
+                    
+                    // Set the background of the div to the pasted image
+                    element.style.backgroundImage = 'url(' + base64Data + ')';
+                    element.style.backgroundSize = 'contain';
+                    element.style.backgroundPosition = 'center';
+                    element.style.backgroundRepeat = 'no-repeat';
+                    
+                    // Make the text transparent so it doesn't overlap with the image
+                    element.style.color = 'transparent';
+                };
+
+                // Read the image file as a base64 encoded data URL
+                reader.readAsDataURL(blob);
+            }else{
+                alert('No image in clipboard found');
+            }
+        }
+    });
+});
+
+waitForElement('${inputFor}-description', (textarea) => {
+    textarea.addEventListener('input', () => {
+        const element = document.getElementById('${individualID}');
+        if (element) {
+            element.setAttribute('data-description', textarea.value);
+        }
+    });
+});
+`;
+
+    return {
+        container, laScript
+    };
+}
+
 async function handleDropDown(myVisual, container, selectedText, infoToLookFor) {
     const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
     const optionClass = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/option-class");
-
-    // Retrieve the list of all the instances of the option class
-    const optionClassResource = await store.getResourceAsync(optionClass);
-    const listName = optionClassResource.get("https://atomicdata.dev/properties/shortname");
-    const blogCollection = new CollectionBuilder(store)
-        .setProperty(core.properties.isA)
-        .setValue(optionClass)
-        .build();
-    const myClasses = await blogCollection.getAllMembers(); // string[]
+    let listName = ""
+    let myClasses = []
+    if (!optionClass) {
+        // then there I am aiming for something bigger
+        let optionParentClass = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/option-parent-class")
+        let parentRes = await store.getResourceAsync(optionParentClass);
+        let parentClasses = parentRes.get("https://atomicdata.dev/properties/classes");
+        let finalMyClassesContainingDuplicates = []
+        for (const parentClass of parentClasses) {
+            const blogCollection = new CollectionBuilder(store)
+                .setProperty(core.properties.isA)
+                .setValue(parentClass)
+                .build();
+            let tmpMembers = await blogCollection.getAllMembers(); // string[]
+            for (const member of tmpMembers) {
+                finalMyClassesContainingDuplicates.push(member)
+            }
+        }
+        myClasses = finalMyClassesContainingDuplicates
+    } else {
+        // Retrieve the list of all the instances of the option class
+        const optionClassResource = await store.getResourceAsync(optionClass);
+        listName = optionClassResource.get("https://atomicdata.dev/properties/shortname");
+        const blogCollection = new CollectionBuilder(store)
+            .setProperty(core.properties.isA)
+            .setValue(optionClass)
+            .build();
+        myClasses = await blogCollection.getAllMembers(); // string[]
+    }
     infoToLookFor.push(inputFor);
 
     let optionsHTML = '';
@@ -147,19 +314,25 @@ async function handleDropDown(myVisual, container, selectedText, infoToLookFor) 
     for (const key of myClasses) {
         const snResource = await store.getResourceAsync(key);
         let optionValue = snResource.get("https://atomicdata.dev/properties/shortname");
-        const comment = snResource.get("https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-comment")
-        if(comment){
-            optionValue += ": " + comment
+        let comment = snResource.get("https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-comment");
+        if (comment) {
+            optionValue += ": " + comment;
         }
         optionValues.push({key, optionValue});
-        optionsHTML += `<option value="${key}">${optionValue}</option>`;
+        optionsHTML += `<option class="dropdown" value="${key}">${optionValue}</option>`;
     }
+
+    let randomValue = ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018-]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    ).replace(/-/g, '_');
 
     let dropdown = `
         <div class="wiserModal">
+            <div class="textInfo">Dropdown</div>
             <label class="wiserSearchLabel" for="${inputFor}">${listName}</label>
-             <input class="wiserSearchInput" type="text" id="search-${inputFor.replace(/[^a-zA-Z0-9_-]/g, '')}" placeholder="Search ${listName}...">
+            <input class="wiserSearchInput" type="text" id="search-${inputFor.replace(/[^a-zA-Z0-9_-]/g, '')}" placeholder="Search ${listName}...">
             <select class="dropdown" name="${inputFor}" id="${inputFor}">
+                <option class="dropdown" value="" selected disabled hidden>Select an option</option>
                 ${optionsHTML}
             </select>
         </div>
@@ -168,25 +341,26 @@ async function handleDropDown(myVisual, container, selectedText, infoToLookFor) 
     // Add the dropdown to the container
     container += dropdown;
 
+    let functionName = "eventFunction_" + randomValue;
+
     // JavaScript code as a string
     const laScript = `
-        function checkElementExistence(elementId, eventType, eventFunction, intervalTime = 100) {
+        function checkElementExistence(elementId, eventType, ${functionName}, intervalTime = 100) {
             const intervalId = setInterval(function() {
                 const element = document.getElementById(elementId);
                 if (element) {
                     clearInterval(intervalId);
-                    addEventListenerToElement(element, eventType, eventFunction);
+                    addEventListenerToElement(element, eventType, ${functionName});
                 }
             }, intervalTime);
         }
         
-        function addEventListenerToElement(element, eventType, eventFunction) {
-            element.addEventListener(eventType, eventFunction);
+        function addEventListenerToElement(element, eventType, ${functionName}) {
+            element.addEventListener(eventType, ${functionName});
         }
         
         // Define the event function
-        const eventFunction = function() {
-            console.log("initializing");
+        const ${functionName} = function() {
             const searchValue = this.value.toLowerCase();
             const dropdown = document.getElementById('${inputFor}');
             dropdown.innerHTML = '';
@@ -197,14 +371,14 @@ async function handleDropDown(myVisual, container, selectedText, infoToLookFor) 
                 const optionElement = document.createElement('option');
                 optionElement.value = option.key;
                 optionElement.text = option.optionValue;
+                optionElement.classList.add('dropdown');
                 dropdown.appendChild(optionElement);
             }
         };
         
         // Call the function with appropriate parameters
-        checkElementExistence('search-${inputFor.replace(/[^a-zA-Z0-9_-]/g, '')}', 'input', eventFunction);
+        checkElementExistence('search-${inputFor.replace(/[^a-zA-Z0-9_-]/g, '')}', 'input', ${functionName});
     `;
-
     return {
         container, laScript
     };
@@ -224,6 +398,7 @@ async function createModal(url, magic, selectedText = '') {
     const shortName = concept.get("https://atomicdata.dev/properties/shortname")
     const visuals = concept.get("https://wiser-sp4.interactions.ics.unisg.ch/property/has-visuals")
     let infoToLookFor = []
+    let laFinalScript = "";
     let laScript;
     let container = '<div>'
     container += `
@@ -235,7 +410,6 @@ async function createModal(url, magic, selectedText = '') {
         // only one class is allowed anyway
         const clazz = myVisual.getClasses()[0];
         // define container
-
         switch (clazz) {
             case "https://wiser-sp4.interactions.ics.unisg.ch/class/textarea-visual":
                 container = await handleTextArea(myVisual, container, selectedText, infoToLookFor);
@@ -243,12 +417,23 @@ async function createModal(url, magic, selectedText = '') {
             case "https://wiser-sp4.interactions.ics.unisg.ch/class/dropdown-visual":
                 ({container, laScript} = await handleDropDown(myVisual, container, selectedText, infoToLookFor));
                 break;
-            //TODO: add required/recommended
+            case "https://wiser-sp4.interactions.ics.unisg.ch/class/checkbox-visual":
+                container = await handleCheckbox(myVisual, container, infoToLookFor);
+                break;
+            case "https://wiser-sp4.interactions.ics.unisg.ch/class/insert-image-visual":
+                ({container, laScript} = await handleImageInserter(myVisual, container, selectedText, infoToLookFor));
+                break;
             default:
                 break;
         }
+        if(laScript){
+            laFinalScript += laScript;
+            laScript = null;
+        }
+
     }
     //close container
+    laScript = laFinalScript
     container += '</div>'
     const myDiv = container
     postMessage({
@@ -295,7 +480,7 @@ async function handleKnowledgeUpdate(message) {
                     }
                     const commit = await reallyNewResource.save(store);
                     // TODO: make a better check, whether the element go really created
-                    if(commit){
+                    if (commit) {
                         updatedElements.push(newSubject)
                     }
                 }
@@ -309,6 +494,7 @@ async function handleKnowledgeUpdate(message) {
     })
 
 }
+
 
 onmessage = async (e) => {
     const message = e.data;
@@ -372,7 +558,19 @@ onmessage = async (e) => {
 async function init() {
     const serverURL = "https://wiser-sp4.interactions.ics.unisg.ch";
     await store.setServerUrl(serverURL);
-    //await store.preloadPropsAndClasses();
+
+    // Fetch key and URL from the endpoint
+    const response = await fetch('/v1/api/get_my_agent');
+    if (!response.ok) {
+        throw new Error(`Failed to fetch agent details: ${response.statusText}`);
+    }
+    const agentData = await response.json();
+
+    myAgent = new Agent(
+        agentData.key,
+        agentData.url
+    );
+
     await store.setAgent(myAgent);
     console.log("Atomic Worker: Store initialized successfully");
 }

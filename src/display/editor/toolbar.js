@@ -265,6 +265,13 @@ class HighlightToolbar {
 
 }
 
+function getLastPartOfUrl(url) {
+    // Split the URL by the '/' character
+    const parts = url.split('/');
+    // Return the last part of the array
+    return parts[parts.length - 1];
+}
+
 
 async function setupModal(selectedRange, selection, uiManager, myHide) {
     // lame, but like this I don't have to do round-trips
@@ -277,7 +284,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
         async render(myWorker) {
             const magicWord = 'magic_onSave_' + new Date().toISOString();
             const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
-            const renderURL = 'https://wiser-sp4.interactions.ics.unisg.ch/class/' + current_concept
+            const renderURL = current_concept
             appliedConcept = renderURL
 
             myWorker.postMessage({
@@ -302,7 +309,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
                     container.className = "wiserModal";
 
                     container.innerHTML = myDiv;
-                    if(currentMessage.laScript){
+                    if (currentMessage.laScript) {
                         //add additional script to the DOM
                         const scriptElement = document.createElement("script")
                         scriptElement.type = "text/javascript"; // Ensure the script type is set
@@ -326,23 +333,66 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
                 .setVocab('http://schema.org/')
                 .setTypeof(appliedConcept)
                 .setAttribute('data-wiser-type', current_concept)
-            for(const infoIndex of infoToLookFor){
+            for (const infoIndex of infoToLookFor) {
                 const importantInfo = document.getElementById(infoIndex)
-                if(infoIndex === "https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-id"){
+                if (infoIndex === "https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-id") {
                     container.setId(importantInfo.value)
                     container.setAttribute('data-wiser-potential-subject', potentialSubject)
-                }else{
+                } else if (
+                    infoIndex === "https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-recommended" ||
+                    infoIndex === "https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-required"
+                ) {
                     const infoSpan = new RDFaElement('span')
                         .setAttribute('property', infoIndex)
-                        .setTextContent(importantInfo.value);
+                        .setTextContent(importantInfo.checked);
                     container.addChild(infoSpan)
+                } else if (
+                    infoIndex === "https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-image"
+                ) {
+                    let dataImage = importantInfo.getAttribute('data-image');
+                    let description = importantInfo.getAttribute('data-description')
+                    let markdownImage = `![${description}](${dataImage})`;
+                    let markdownVariable = markdownImage;
+                    if (markdownVariable) {
+                        const imageSpan = new RDFaElement('span')
+                            .setAttribute('property', infoIndex)
+                            .setTextContent(markdownVariable);
+                        container.addChild(imageSpan)
+                    }
+                } else {
+                    if (importantInfo && importantInfo.value && importantInfo.value.length > 1) {
+                        const infoSpan = new RDFaElement('span')
+                            .setAttribute('property', infoIndex)
+                            .setTextContent(importantInfo.value);
+                        container.addChild(infoSpan)
+                    }
                 }
-
             }
+            let page = document.getElementById("pageNumber").value
+            // always set pdf id and page
+            let pdf_name = getLastPartOfUrl(window.location.href)
+
+            const pdfSpan = new RDFaElement('span')
+                .setAttribute('property', 'https://wiser-sp4.interactions.ics.unisg.ch/property/has-pdf-id')
+                .setTextContent(pdf_name)
+            container.addChild(pdfSpan);
+
+            const numberSpan = new RDFaElement('span')
+                .setAttribute('property', 'https://wiser-sp4.interactions.ics.unisg.ch/property/pdf-page-number')
+                .setTextContent(page)
+            container.addChild(numberSpan)
+
+            let url = window.location.href + "#page=" + page;
+
+            const urlSpan = new RDFaElement('span')
+                .setAttribute('property', 'https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-url')
+                .setTextContent(url)
+            container.addChild(urlSpan);
+
             rdfaBuilder.addElement(container);
 
             const builtHtml = rdfaBuilder.build()
-            console.log("adding knowledge", builtHtml)
+            //console.log("adding knowledge", builtHtml)
 
             document.getElementById('rdfa-tmp-storage').setAttribute('data-user-input', builtHtml)
 
