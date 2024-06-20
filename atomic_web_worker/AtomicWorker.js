@@ -127,6 +127,7 @@ async function handleRetrieveConcepts() {
 
 async function handleCheckbox(myVisual, container, infoToLookFor) {
     const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
+    //console.log('handleCheckbox', inputFor)
     const inputInfos = await store.getResourceAsync(inputFor);
     const label = inputInfos.get("https://atomicdata.dev/properties/description");
     infoToLookFor.push(inputFor);
@@ -143,6 +144,7 @@ async function handleCheckbox(myVisual, container, infoToLookFor) {
 
 async function handleTextArea(myVisual, container, selectedText = '', infoToLookFor) {
     const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
+    //console.log('handleTextArea', inputFor)
     const inputInfos = await store.getResourceAsync(inputFor);
     const label = inputInfos.get("https://atomicdata.dev/properties/description");
     const placeholder = inputInfos.get("https://wiser-sp4.interactions.ics.unisg.ch/property/placeholder");
@@ -169,6 +171,7 @@ async function handleTextArea(myVisual, container, selectedText = '', infoToLook
 
 async function handleImageInserter(myVisual, container, selectedText, infoToLookFor) {
     const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
+    //console.log('handleImageInserter', inputFor)
     const individualID = inputFor;
     infoToLookFor.push(inputFor);
 
@@ -275,12 +278,14 @@ waitForElement('${inputFor}-description', (textarea) => {
 
 async function handleDropDown(myVisual, container, selectedText, infoToLookFor) {
     const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
+    console.log('handleDropdown', inputFor)
     const optionClass = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/option-class");
     let listName = ""
     let myClasses = []
     if (!optionClass) {
         // then there I am aiming for something bigger
         let optionParentClass = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/option-parent-class")
+        console.log('dropdown heading for', optionParentClass)
         let parentRes = await store.getResourceAsync(optionParentClass);
         let parentClasses = parentRes.get("https://atomicdata.dev/properties/classes");
         let finalMyClassesContainingDuplicates = []
@@ -288,9 +293,12 @@ async function handleDropDown(myVisual, container, selectedText, infoToLookFor) 
             const blogCollection = new CollectionBuilder(store)
                 .setProperty(core.properties.isA)
                 .setValue(parentClass)
+                .setPageSize(100)
                 .build();
             let tmpMembers = await blogCollection.getAllMembers(); // string[]
+            console.log('may I present? all the members of', parentClass)
             for (const member of tmpMembers) {
+                console.log('push member', member)
                 finalMyClassesContainingDuplicates.push(member)
             }
         }
@@ -302,6 +310,7 @@ async function handleDropDown(myVisual, container, selectedText, infoToLookFor) 
         const blogCollection = new CollectionBuilder(store)
             .setProperty(core.properties.isA)
             .setValue(optionClass)
+            .setPageSize(100)
             .build();
         myClasses = await blogCollection.getAllMembers(); // string[]
     }
@@ -312,14 +321,17 @@ async function handleDropDown(myVisual, container, selectedText, infoToLookFor) 
 
     // Generate options and store option values
     for (const key of myClasses) {
-        const snResource = await store.getResourceAsync(key);
-        let optionValue = snResource.get("https://atomicdata.dev/properties/shortname");
-        let comment = snResource.get("https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-comment");
-        if (comment) {
-            optionValue += ": " + comment;
+        //console.log('dropdown heading for key', key)
+        if(key){
+            const snResource = await store.getResourceAsync(key);
+            let optionValue = snResource.get("https://atomicdata.dev/properties/shortname");
+            let comment = snResource.get("https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-comment");
+            if (comment) {
+                optionValue += ": " + comment;
+            }
+            optionValues.push({key, optionValue});
+            optionsHTML += `<option class="dropdown" value="${key}">${optionValue}</option>`;
         }
-        optionValues.push({key, optionValue});
-        optionsHTML += `<option class="dropdown" value="${key}">${optionValue}</option>`;
     }
 
     let randomValue = ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018-]/g, c =>
@@ -391,6 +403,7 @@ function getLastPartOfURL(url) {
 }
 
 async function createModal(url, magic, selectedText = '') {
+    console.log('going for concept', url)
     const concept = await store.getResourceAsync(url)
     const lastPart = getLastPartOfURL(url)
     const potentialSubject = store.createSubject(lastPart)
