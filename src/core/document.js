@@ -47,15 +47,7 @@ import {
   XRefEntryException,
   XRefParseException,
 } from "./core_utils.js";
-import {
-  Dict,
-  isName,
-  isRefsEqual,
-  Name,
-  Ref,
-  RefSet,
-  RefSetCache,
-} from "./primitives.js";
+import { Dict, isName, isRefsEqual, Name, Ref, RefSet } from "./primitives.js";
 import { getXfaFontDict, getXfaFontName } from "./xfa_fonts.js";
 import { BaseStream } from "./base_stream.js";
 import { calculateMD5 } from "./crypto.js";
@@ -283,7 +275,7 @@ class Page {
           continue;
         }
         if (annotation.deleted) {
-          deletedAnnotations.put(ref, ref);
+          deletedAnnotations.put(ref);
           continue;
         }
         existingAnnotations?.put(ref);
@@ -293,11 +285,16 @@ class Page {
     }
   }
 
-  async saveNewAnnotations(handler, task, annotations, imagePromises) {
+  async saveNewAnnotations(
+    handler,
+    task,
+    annotations,
+    imagePromises,
+    jan_second_add_on = false
+  ) {
     if (this.xfaFactory) {
       throw new Error("XFA: Cannot save new annotations.");
     }
-
     const partialEvaluator = new PartialEvaluator({
       xref: this.xref,
       handler,
@@ -311,7 +308,7 @@ class Page {
       options: this.evaluatorOptions,
     });
 
-    const deletedAnnotations = new RefSetCache();
+    const deletedAnnotations = new RefSet();
     const existingAnnotations = new RefSet();
     this.#replaceIdByRef(annotations, deletedAnnotations, existingAnnotations);
 
@@ -319,11 +316,13 @@ class Page {
     const annotationsArray = this.annotations.filter(
       a => !(a instanceof Ref && deletedAnnotations.has(a))
     );
+
     const newData = await AnnotationFactory.saveNewAnnotations(
       partialEvaluator,
       task,
       annotations,
-      imagePromises
+      imagePromises,
+      jan_second_add_on
     );
 
     for (const { ref } of newData.annotations) {
@@ -346,9 +345,6 @@ class Page {
       { ref: this.ref, data: buffer.join("") },
       ...newData.annotations
     );
-    for (const deletedRef of deletedAnnotations) {
-      objects.push({ ref: deletedRef, data: null });
-    }
 
     return objects;
   }

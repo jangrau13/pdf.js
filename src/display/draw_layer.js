@@ -214,6 +214,7 @@ class DrawLayer {
   }
 
   changeOpacity(id, opacity) {
+    console.log("draw opacity", opacity)
     this.#mapping.get(id).setAttribute("fill-opacity", opacity);
   }
 

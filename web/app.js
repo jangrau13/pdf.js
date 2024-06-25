@@ -632,8 +632,13 @@ const PDFViewerApplication = {
     if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       const queryString = document.location.search.substring(1);
       const params = parseQueryString(queryString);
-      file = params.get("file") ?? AppOptions.get("defaultUrl");
-      validateFileURL(file);
+      const pdfID = document.getElementById("pdf_id").dataset.id;
+      //file = params.get("file") ?? AppOptions.get("defaultUrl");
+      if(pdfID.length > 1){
+        file = "/v1/api/pdf_files/pdf/" + pdfID + ".pdf"
+        validateFileURL(file);
+      }
+
     } else if (PDFJSDev.test("MOZCENTRAL")) {
       file = window.location.href;
     } else if (PDFJSDev.test("CHROME")) {
@@ -869,7 +874,12 @@ const PDFViewerApplication = {
     }
     const editorIndicator =
       this._hasAnnotationEditors && !this.pdfRenderingQueue.printing;
-    document.title = `${editorIndicator ? "* " : ""}${title}`;
+    // edit by Jan
+    const subTitleComponent = document.getElementById("myPDFTitle")
+    if(subTitleComponent){
+      subTitleComponent.textContent = `${editorIndicator ? "* " : ""}${title}`
+    }
+    //document.title = `${editorIndicator ? "* " : ""}${title}`;
   },
 
   get _docFilename() {
@@ -1069,10 +1079,12 @@ const PDFViewerApplication = {
       const blob = new Blob([data], { type: "application/pdf" });
 
       await this.downloadManager.download(blob, url, filename, options);
+      // TODO: let the user decide whether to save it on axum or download it manually
     } catch {
       // When the PDF document isn't ready, or the PDF file is still
       // downloading, simply download using the URL.
-      await this.downloadManager.downloadUrl(url, filename, options);
+      //await this.downloadManager.downloadUrl(url, filename, options);
+      // TODO: let the user decide whether to save it on axum or download it manually
     }
   },
 

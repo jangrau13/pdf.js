@@ -412,6 +412,7 @@ class AnnotationEditor {
   }
 
   addToAnnotationStorage() {
+    // here I need to add the information to the annotation I want to
     this._uiManager.addToAnnotationStorage(this);
   }
 

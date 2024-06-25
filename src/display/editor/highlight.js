@@ -67,9 +67,11 @@ class HighlightEditor extends AnnotationEditor {
 
   #methodOfCreation = "";
 
+  #rdfa_content = null;
+
   static _defaultColor = null;
 
-  static _defaultOpacity = 1;
+  static _defaultOpacity = 0.5;
 
   static _defaultThickness = 12;
 
@@ -108,6 +110,12 @@ class HighlightEditor extends AnnotationEditor {
     this.#methodOfCreation = params.methodOfCreation || "";
     this.#text = params.text || "";
     this._isDraggable = false;
+
+    const storedInput = document.getElementById('rdfa-tmp-storage').getAttribute('data-user-input')
+    if (storedInput) {
+      this.#rdfa_content = storedInput;
+    }
+    document.getElementById('rdfa-tmp-storage').removeAttribute('data-user-input');
 
     if (params.highlightId > -1) {
       this.#isFreeHighlight = true;
@@ -376,7 +384,8 @@ class HighlightEditor extends AnnotationEditor {
     }
     if (this._uiManager.highlightColors) {
       this.#colorPicker = new ColorPicker({ editor: this });
-      toolbar.addColorPicker(this.#colorPicker);
+      //toolbar.addColorPicker(this.#colorPicker);
+      //toolbar.addJanEditorTool();
     }
     return toolbar;
   }
@@ -564,6 +573,14 @@ class HighlightEditor extends AnnotationEditor {
     if (this.#text) {
       div.setAttribute("aria-label", this.#text);
       div.setAttribute("role", "mark");
+    }
+    if (this.#rdfa_content) {
+      const innerRdfa = document.createElement("div");
+      innerRdfa.setAttribute("id", "rdfa-"+ this.#id)
+      innerRdfa.setAttribute("class", "rdfa-content")
+      innerRdfa.innerHTML = this.#rdfa_content;
+      innerRdfa.style.display = "none";
+      div.appendChild(innerRdfa);
     }
     if (this.#isFreeHighlight) {
       div.classList.add("free");
@@ -757,6 +774,7 @@ class HighlightEditor extends AnnotationEditor {
         highlightOutlines: this._freeHighlight.getOutlines(),
         clipPathId: this._freeHighlightClipId,
         methodOfCreation: "main_toolbar",
+        test_jan: "rdfa_jan"
       });
     } else {
       parent.drawLayer.removeFreeHighlight(this._freeHighlightId);
@@ -769,7 +787,6 @@ class HighlightEditor extends AnnotationEditor {
   /** @inheritdoc */
   static deserialize(data, parent, uiManager) {
     const editor = super.deserialize(data, parent, uiManager);
-
     const {
       rect: [blX, blY, trX, trY],
       color,

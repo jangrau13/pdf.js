@@ -535,7 +535,13 @@ class WorkerMessageHandler {
 
     handler.on(
       "SaveDocument",
-      async function ({ isPureXfa, numPages, annotationStorage, filename }) {
+      async function ({
+        isPureXfa,
+        numPages,
+        annotationStorage,
+        filename,
+        jan_document = "reading something, you should not",
+      }) {
         const globalPromises = [
           pdfManager.requestLoadedStream(),
           pdfManager.ensureCatalog("acroForm"),
@@ -595,7 +601,13 @@ class WorkerMessageHandler {
               pdfManager.getPage(pageIndex).then(page => {
                 const task = new WorkerTask(`Save (editor): page ${pageIndex}`);
                 return page
-                  .saveNewAnnotations(handler, task, annotations, imagePromises)
+                  .saveNewAnnotations(
+                    handler,
+                    task,
+                    annotations,
+                    imagePromises,
+                    jan_document
+                  )
                   .finally(function () {
                     finishWorkerTask(task);
                   });

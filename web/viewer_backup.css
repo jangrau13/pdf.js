@@ -31,12 +31,12 @@
   --editor-toolbar-base-offset: 105px;
 
   --main-color: rgb(12 12 13);
-  --body-bg-color: rgb(248, 248, 248);
+  --body-bg-color: rgb(212 212 215);
   --progressBar-color: rgb(10 132 255);
   --progressBar-bg-color: rgb(221 221 222);
   --progressBar-blend-color: rgb(116 177 239);
   --scrollbar-color: auto;
-  --scrollbar-bg-color: rgb(248, 248, 248);
+  --scrollbar-bg-color: auto;
   --toolbar-icon-bg-color: rgb(0 0 0);
   --toolbar-icon-hover-bg-color: rgb(0 0 0);
 
@@ -134,12 +134,12 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --main-color: rgb(249 249 250);
-    --body-bg-color: rgb(248, 248, 248);
-    --progressBar-color: rgb(30, 223, 0);
+    --body-bg-color: rgb(42 42 46);
+    --progressBar-color: rgb(0 96 223);
     --progressBar-bg-color: rgb(40 40 43);
     --progressBar-blend-color: rgb(20 68 133);
     --scrollbar-color: rgb(121 121 123);
-    --scrollbar-bg-color: rgb(248, 248, 248);
+    --scrollbar-bg-color: rgb(35 35 39);
     --toolbar-icon-bg-color: rgb(255 255 255);
     --toolbar-icon-hover-bg-color: rgb(255 255 255);
 
@@ -215,12 +215,12 @@
 }
 
 html,
-#janpdf {
+body {
   height: 100%;
   width: 100%;
 }
 
-#janpdf {
+body {
   background-color: var(--body-bg-color);
   scrollbar-color: var(--scrollbar-color) var(--scrollbar-bg-color);
 }
@@ -238,10 +238,6 @@ html,
   overflow: hidden;
   cursor: none;
   user-select: none;
-}
-
-#janpdf #viewerContainer{
-  height: 90vh;
 }
 
 .pdfPresentationMode:fullscreen section:not([data-internal-link]) {
@@ -303,10 +299,6 @@ html,
 #viewerContainer {
   overflow: auto;
   position: absolute;
-  /* Copyright 2014 Mozilla Foundation
-   * added by Jan
-   */
-  height: 100%;
   inset: 32px 0 0;
   outline: none;
 }

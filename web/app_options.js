@@ -141,7 +141,9 @@ const defaultOptions = {
     // in Firefox release, but it has to be temporary.
     // TODO: remove it when unnecessary.
     /** @type {boolean} */
-    value: typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING"),
+    // change Jan value: typeof PDFJSDev === "undefined" 
+    // || PDFJSDev.test("TESTING"),
+    value: true,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
   },
   enableHighlightFloatingButton: {
@@ -149,7 +151,9 @@ const defaultOptions = {
     // in Firefox release, but it has to be temporary.
     // TODO: remove it when unnecessary.
     /** @type {boolean} */
-    value: typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING"),
+    // change Jan value: typeof PDFJSDev === "undefined" 
+    // || PDFJSDev.test("TESTING"),
+    value: true,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE,
   },
   enableML: {
@@ -370,7 +374,7 @@ const defaultOptions = {
         ? "../src/pdf.worker.js"
         : PDFJSDev.test("MOZCENTRAL")
           ? "resource://pdf.js/build/pdf.worker.mjs"
-          : "../build/pdf.worker.mjs",
+          : "/v1/api/pdf_api/js/pdf.worker.mjs",
     kind: OptionKind.WORKER,
   },
 };
@@ -380,7 +384,7 @@ if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
     value:
       typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")
         ? ""
-        : "compressed.tracemonkey-pldi-09.pdf",
+        : "",
     kind: OptionKind.VIEWER,
   };
   defaultOptions.sandboxBundleSrc = {
@@ -388,7 +392,7 @@ if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
     value:
       typeof PDFJSDev === "undefined"
         ? "../build/dev-sandbox/pdf.sandbox.mjs"
-        : "../build/pdf.sandbox.mjs",
+        : "../js/pdf.sandbox.mjs",
     kind: OptionKind.VIEWER,
   };
   defaultOptions.viewerCssTheme = {

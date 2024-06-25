@@ -2889,8 +2889,10 @@ class WorkerTransport {
           "please use the getData-method instead."
       );
     }
+    const marks = wiserSerializeHTMLElement(
+      document.getElementById("viewerContainer")
+    );
     const { map, transfer } = this.annotationStorage.serializable;
-
     return this.messageHandler
       .sendWithPromise(
         "SaveDocument",
@@ -2899,6 +2901,7 @@ class WorkerTransport {
           numPages: this._numPages,
           annotationStorage: map,
           filename: this._fullReader?.filename ?? null,
+          jan_document: marks,
         },
         transfer
       )
@@ -3198,6 +3201,126 @@ class PDFObjects {
       yield [objId, data];
     }
   }
+}
+
+function wiserSerializeHTMLElement(element, helper) {
+  const serializedElements = [];
+
+  // Get the scale factor from the element with the id "viewer"
+  const viewer = element.children[1];
+  const scaleFactor = viewer
+    ? parseFloat(viewer.style.getPropertyValue("--scale-factor"))
+    : 1;
+
+  // Serialize any element with its children
+  function serializeElementWithChildren(element) {
+    const elementObj = {
+      tagName: element.tagName,
+      attributes: {},
+      content: element.ariaLabel, // capture the inner HTML of the element
+      children: [],
+      scaleFactor, // add the scale factor
+    };
+
+    // Serialize attributes
+    Array.from(element.attributes).forEach(attr => {
+      elementObj.attributes[attr.name] = attr.value;
+    });
+
+    // Serialize children
+    Array.from(element.children).forEach(child => {
+      elementObj.children.push(serializeElementWithChildren(child));
+    });
+
+    return elementObj;
+  }
+
+  function extractBaseInfo(expression) {
+    const regex = /(\d+\.?\d*)px/;
+    const matches = expression.match(regex);
+    return matches ? parseFloat(matches[1]) : null;
+  }
+
+  // Find the closest parent with the class "page" and return its height
+  function analyzePageOfMark(element) {
+    let parent = element.parentElement;
+    while (parent && !parent.classList.contains("page")) {
+      parent = parent.parentElement;
+    }
+    const myHeight = parent.style.getPropertyValue("height");
+    const myWidth = parent.style.getPropertyValue("width");
+    const pageNumber = parseInt(parent.dataset.pageNumber);
+    if (pageNumber === undefined) {
+      console.error("Page number not found");
+    }
+    const baseHeight = extractBaseInfo(myHeight);
+    const baseWidth = extractBaseInfo(myWidth);
+    const returner = {
+      baseHeight,
+      baseWidth,
+      pageNumber,
+    };
+    return returner;
+  }
+
+  // Find all mark elements and serialize their grandparent if it's 'div'
+  function findAndSerializeMarks(element) {
+    if (element.attributes.role && element.attributes.role.value === "mark") {
+      // Check if the parent is 'div'
+      if (
+        element.parentElement &&
+        element.parentElement.tagName.toLowerCase() === "div"
+      ) {
+        const parentSerialized = serializeElementWithChildren(element);
+
+        // Add page height to the serialized object
+        const { baseHeight, baseWidth, pageNumber } =
+          analyzePageOfMark(element);
+        parentSerialized.pageNumber = pageNumber;
+        parentSerialized.actualHeight = baseHeight;
+        parentSerialized.actualWidth = baseWidth;
+        const exactLocation = calculateElementPositionAndSize(parentSerialized);
+        parentSerialized.exactLocation = exactLocation;
+        serializedElements.push(parentSerialized);
+      }
+    } else {
+      // Recurse through child elements
+      Array.from(element.children).forEach(findAndSerializeMarks);
+    }
+  }
+
+  function calculateElementPositionAndSize(element) {
+    // Extract style attributes
+    const actualHeight = element.actualHeight;
+    const actualWidth = element.actualWidth;
+    const style = element.attributes.style;
+    const styles = style.split(";").reduce((acc, current) => {
+      const [key, value] = current.split(":").map(item => item.trim());
+      if (key && value) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
+
+    // Calculate position and size
+    const left = (parseFloat(styles.left) / 100) * actualWidth;
+    const top = (parseFloat(styles.top) / 100) * actualHeight;
+    const width = (parseFloat(styles.width) / 100) * actualWidth;
+    const height = (parseFloat(styles.height) / 100) * actualHeight;
+
+    const quadPointsLite = {
+      topLeft: { x: left, y: actualHeight - top },
+      topRight: { x: left + width, y: actualHeight - top },
+      bottomLeft: { x: left, y: actualHeight - (top + height) },
+      bottomRight: { x: left + width, y: actualHeight - (top + height) },
+    };
+
+    return { left, top, width, height, quadPointsLite };
+  }
+
+  findAndSerializeMarks(element);
+
+  return serializedElements;
 }
 
 /**
