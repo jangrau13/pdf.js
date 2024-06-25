@@ -1192,7 +1192,7 @@ gulp.task(
         "locale",
         function scriptingGeneric() {
             const defines = {...DEFINES, GENERIC: true};
-            return merge([
+            return ordered([
                 buildDefaultPreferences(defines, "generic/"),
                 createTemporaryScriptingBundle(defines),
             ]);

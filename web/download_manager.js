@@ -147,7 +147,7 @@ class DownloadManager {
     if (choice || savingDone) {
       console.log("saving it with savingDone", savingDone)
       // User chose to save it to the server
-      saveToServer(blob, finalFilename, savingDone);
+      saveToServer(new Blob([data], { type: "application/pdf" }), finalFilename, savingDone);
       // allow the saving of knowledge now
       const subTitleComponent = document.getElementById("myPDFTitle")
       if(subTitleComponent){

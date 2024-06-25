@@ -326,7 +326,7 @@ class AnnotationFactory {
     return imagePromises;
   }
 
-  static async saveNewAnnotations(evaluator, task, annotations, imagePromises) {
+  static async saveNewAnnotations(evaluator, task, annotations, imagePromises, jan_addon = false) {
     const xref = evaluator.xref;
     let baseFontRef;
     const dependencies = [];
@@ -365,7 +365,9 @@ class AnnotationFactory {
               HighlightAnnotation.createNewAnnotation(
                 xref,
                 annotation,
-                dependencies
+                dependencies,
+                // added by Jan
+                {marks_on_page: jan_addon}
               )
             );
           } else {
@@ -1768,11 +1770,20 @@ class MarkupAnnotation extends Annotation {
 
     if (ap) {
       const apRef = xref.getNewTemporaryRef();
-      annotationDict = this.createNewDict(annotation, xref, { apRef });
+      // if else added by Jan
+      annotationDict = params.marks_on_page
+          ? this.createNewDict(annotation, xref, {
+            apRef,
+            marks_on_page: params.marks_on_page,
+          })
+          : this.createNewDict(annotation, xref, {apRef});
       await writeObject(apRef, ap, buffer, xref);
-      dependencies.push({ ref: apRef, data: buffer.join("") });
+      dependencies.push({ref: apRef, data: buffer.join("")});
     } else {
-      annotationDict = this.createNewDict(annotation, xref, {});
+      // if else case by Jan
+      annotationDict = params.marks_on_page
+          ? this.createNewDict(annotation, xref, {params})
+          : this.createNewDict(annotation, xref, {});
     }
     if (Number.isInteger(annotation.parentTreeId)) {
       annotationDict.set("StructParent", annotation.parentTreeId);
@@ -4660,12 +4671,15 @@ class HighlightAnnotation extends MarkupAnnotation {
         closestMark = wiserFindClosestMark(marks_on_page, annotation);
     }
 
+    console.log("did I find the mark?", closestMark, marks_on_page)
+
     if (closestMark) {
         rdfa = closestMark.children.filter(child => {
             const attributes = child.attributes
             return attributes["class"] === "rdfa-content"
         })[0]
         const htmlString = createHTMLStringFromObject(rdfa)
+        console.log("HTML string", htmlString)
         if (htmlString) {
             highlight.set(
                 "Contents",

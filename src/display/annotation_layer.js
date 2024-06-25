@@ -680,9 +680,7 @@ class AnnotationElement {
       parent: this.parent,
       elements: [this],
     }));
-    let popup_render = popup.render()
     //TODO: why is this rendering this bad?
-    this.parent.div.append(popup_render);
     wiserEventBus.on(magicWord, (msg) => {
       const startTime = Date.now();
       let linkHeaderDiv;
@@ -697,7 +695,7 @@ class AnnotationElement {
           linkHeaderDiv.style.display = 'none'
       }
     })
-    this.parent.div.append(popup_render);
+    this.parent.div.append(popup.render());
   }
 
   /**
