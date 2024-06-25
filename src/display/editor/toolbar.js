@@ -13,121 +13,132 @@
  * limitations under the License.
  */
 
-import {noContextMenu} from "../display_utils.js";
+import { noContextMenu } from "../display_utils.js";
 import {RDFaBuilder} from "../../../web/rdfa/RDFaBuilder.js";
 import {RDFaElement} from "../../../web/rdfa/RDFaElement.js";
 
 class EditorToolbar {
-    #toolbar = null;
+  #toolbar = null;
 
-    #colorPicker = null;
+  #colorPicker = null;
 
-    #editor;
+  #editor;
 
-    #buttons = null;
+  #buttons = null;
 
-    constructor(editor) {
-        this.#editor = editor;
+  constructor(editor) {
+    this.#editor = editor;
+  }
+
+  render() {
+    const editToolbar = (this.#toolbar = document.createElement("div"));
+    editToolbar.className = "editToolbar";
+    editToolbar.setAttribute("role", "toolbar");
+    const signal = this.#editor._uiManager._signal;
+    editToolbar.addEventListener("contextmenu", noContextMenu, { signal });
+    editToolbar.addEventListener("pointerdown", EditorToolbar.#pointerDown, {
+      signal,
+    });
+
+    const buttons = (this.#buttons = document.createElement("div"));
+    buttons.className = "buttons";
+    editToolbar.append(buttons);
+
+    const position = this.#editor.toolbarPosition;
+    if (position) {
+      const { style } = editToolbar;
+      const x =
+        this.#editor._uiManager.direction === "ltr"
+          ? 1 - position[0]
+          : position[0];
+      style.insetInlineEnd = `${100 * x}%`;
+      style.top = `calc(${
+        100 * position[1]
+      }% + var(--editor-toolbar-vert-offset))`;
     }
 
-    render() {
-        const editToolbar = (this.#toolbar = document.createElement("div"));
-        editToolbar.className = "editToolbar";
-        editToolbar.setAttribute("role", "toolbar");
-        editToolbar.addEventListener("contextmenu", noContextMenu);
-        editToolbar.addEventListener("pointerdown", EditorToolbar.#pointerDown);
+    this.#addDeleteButton();
 
-        const buttons = (this.#buttons = document.createElement("div"));
-        buttons.className = "buttons";
-        editToolbar.append(buttons);
+    return editToolbar;
+  }
 
-        const position = this.#editor.toolbarPosition;
-        if (position) {
-            const {style} = editToolbar;
-            const x =
-                this.#editor._uiManager.direction === "ltr"
-                    ? 1 - position[0]
-                    : position[0];
-            style.insetInlineEnd = `${100 * x}%`;
-            style.top = `calc(${100 * position[1]
-            }% + var(--editor-toolbar-vert-offset))`;
-        }
+  static #pointerDown(e) {
+    e.stopPropagation();
+  }
 
-        this.#addDeleteButton();
+  #focusIn(e) {
+    this.#editor._focusEventsAllowed = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }
 
-        return editToolbar;
-    }
+  #focusOut(e) {
+    this.#editor._focusEventsAllowed = true;
+    e.preventDefault();
+    e.stopPropagation();
+  }
 
-    static #pointerDown(e) {
-        e.stopPropagation();
-    }
+  #addListenersToElement(element) {
+    // If we're clicking on a button with the keyboard or with
+    // the mouse, we don't want to trigger any focus events on
+    // the editor.
+    const signal = this.#editor._uiManager._signal;
+    element.addEventListener("focusin", this.#focusIn.bind(this), {
+      capture: true,
+      signal,
+    });
+    element.addEventListener("focusout", this.#focusOut.bind(this), {
+      capture: true,
+      signal,
+    });
+    element.addEventListener("contextmenu", noContextMenu, { signal });
+  }
 
-    #focusIn(e) {
-        this.#editor._focusEventsAllowed = false;
-        e.preventDefault();
-        e.stopPropagation();
-    }
+  hide() {
+    this.#toolbar.classList.add("hidden");
+    this.#colorPicker?.hideDropdown();
+  }
 
-    #focusOut(e) {
-        this.#editor._focusEventsAllowed = true;
-        e.preventDefault();
-        e.stopPropagation();
-    }
+  show() {
+    this.#toolbar.classList.remove("hidden");
+  }
 
-    #addListenersToElement(element) {
-        // If we're clicking on a button with the keyboard or with
-        // the mouse, we don't want to trigger any focus events on
-        // the editor.
-        element.addEventListener("focusin", this.#focusIn.bind(this), {
-            capture: true,
-        });
-        element.addEventListener("focusout", this.#focusOut.bind(this), {
-            capture: true,
-        });
-        element.addEventListener("contextmenu", noContextMenu);
-    }
+  #addDeleteButton() {
+    const button = document.createElement("button");
+    button.className = "delete";
+    button.tabIndex = 0;
+    button.setAttribute(
+      "data-l10n-id",
+      `pdfjs-editor-remove-${this.#editor.editorType}-button`
+    );
+    this.#addListenersToElement(button);
+    button.addEventListener(
+      "click",
+      e => {
+        this.#editor._uiManager.delete();
+      },
+      { signal: this.#editor._uiManager._signal }
+    );
+    this.#buttons.append(button);
+  }
 
-    hide() {
-        this.#toolbar.classList.add("hidden");
-        this.#colorPicker?.hideDropdown();
-    }
+  get #divider() {
+    const divider = document.createElement("div");
+    divider.className = "divider";
+    return divider;
+  }
 
-    show() {
-        this.#toolbar.classList.remove("hidden");
-    }
+  addAltTextButton(button) {
+    this.#addListenersToElement(button);
+    this.#buttons.prepend(button, this.#divider);
+  }
 
-    #addDeleteButton() {
-        const button = document.createElement("button");
-        button.className = "delete";
-        button.tabIndex = 0;
-        button.setAttribute(
-            "data-l10n-id",
-            `pdfjs-editor-remove-${this.#editor.editorType}-button`
-        );
-        this.#addListenersToElement(button);
-        button.addEventListener("click", e => {
-            this.#editor._uiManager.delete();
-        });
-        this.#buttons.append(button);
-    }
-
-    get #divider() {
-        const divider = document.createElement("div");
-        divider.className = "divider";
-        return divider;
-    }
-
-    addAltTextButton(button) {
-        this.#addListenersToElement(button);
-        this.#buttons.prepend(button, this.#divider);
-    }
-
-    addColorPicker(colorPicker) {
-        this.#colorPicker = colorPicker;
-        const button = colorPicker.renderButton();
-        this.#addListenersToElement(button);
-        this.#buttons.prepend(button, this.#divider);
-    }
+  addColorPicker(colorPicker) {
+    this.#colorPicker = colorPicker;
+    const button = colorPicker.renderButton();
+    this.#addListenersToElement(button);
+    this.#buttons.prepend(button, this.#divider);
+  }
 
     addJanEditorTool() {
         // I am in the right toolbar, but only for editing
@@ -168,100 +179,104 @@ class EditorToolbar {
         this.#buttons.prepend(button, this.#divider);
     }
 
-    remove() {
-        this.#toolbar.remove();
-        this.#colorPicker?.destroy();
-        this.#colorPicker = null;
-    }
+  remove() {
+    this.#toolbar.remove();
+    this.#colorPicker?.destroy();
+    this.#colorPicker = null;
+  }
 }
 
 class HighlightToolbar {
-    #buttons = null;
+  #buttons = null;
 
-    #toolbar = null;
+  #toolbar = null;
 
-    #uiManager;
+  #uiManager;
 
-    constructor(uiManager) {
-        this.#uiManager = uiManager;
-    }
+  constructor(uiManager) {
+    this.#uiManager = uiManager;
+  }
 
-    #render() {
-        const editToolbar = (this.#toolbar = document.createElement("div"));
-        editToolbar.className = "editToolbar";
-        editToolbar.setAttribute("role", "toolbar");
-        editToolbar.addEventListener("contextmenu", noContextMenu);
+  #render() {
+    const editToolbar = (this.#toolbar = document.createElement("div"));
+    editToolbar.className = "editToolbar";
+    editToolbar.setAttribute("role", "toolbar");
+    editToolbar.addEventListener("contextmenu", noContextMenu, {
+      signal: this.#uiManager._signal,
+    });
 
-        const buttons = (this.#buttons = document.createElement("div"));
-        buttons.className = "buttons";
-        editToolbar.append(buttons);
+    const buttons = (this.#buttons = document.createElement("div"));
+    buttons.className = "buttons";
+    editToolbar.append(buttons);
 
-        this.#addHighlightButton();
+    this.#addHighlightButton();
 
-        return editToolbar;
-    }
+    return editToolbar;
+  }
 
-    #getLastPoint(boxes, isLTR) {
-        let lastY = 0;
-        let lastX = 0;
-        for (const box of boxes) {
-            const y = box.y + box.height;
-            if (y < lastY) {
-                continue;
-            }
-            const x = box.x + (isLTR ? box.width : 0);
-            if (y > lastY) {
-                lastX = x;
-                lastY = y;
-                continue;
-            }
-            if (isLTR) {
-                if (x > lastX) {
-                    lastX = x;
-                }
-            } else if (x < lastX) {
-                lastX = x;
-            }
+  #getLastPoint(boxes, isLTR) {
+    let lastY = 0;
+    let lastX = 0;
+    for (const box of boxes) {
+      const y = box.y + box.height;
+      if (y < lastY) {
+        continue;
+      }
+      const x = box.x + (isLTR ? box.width : 0);
+      if (y > lastY) {
+        lastX = x;
+        lastY = y;
+        continue;
+      }
+      if (isLTR) {
+        if (x > lastX) {
+          lastX = x;
         }
-        return [isLTR ? 1 - lastX : lastX, lastY];
+      } else if (x < lastX) {
+        lastX = x;
+      }
     }
+    return [isLTR ? 1 - lastX : lastX, lastY];
+  }
 
-    show(parent, boxes, isLTR) {
-        const [x, y] = this.#getLastPoint(boxes, isLTR);
-        const {style} = (this.#toolbar ||= this.#render());
-        parent.append(this.#toolbar);
-        style.insetInlineEnd = `${100 * x}%`;
-        style.top = `calc(${100 * y}% + var(--editor-toolbar-vert-offset))`;
-    }
+  show(parent, boxes, isLTR) {
+    const [x, y] = this.#getLastPoint(boxes, isLTR);
+    const { style } = (this.#toolbar ||= this.#render());
+    parent.append(this.#toolbar);
+    style.insetInlineEnd = `${100 * x}%`;
+    style.top = `calc(${100 * y}% + var(--editor-toolbar-vert-offset))`;
+  }
 
-    hide() {
-        this.#toolbar.remove();
-    }
+  hide() {
+    this.#toolbar.remove();
+  }
 
-    #addHighlightButton() {
-        const button = document.createElement("button");
-        button.className = "highlightButton";
-        button.tabIndex = 0;
-        button.setAttribute("data-l10n-id", `pdfjs-highlight-floating-button1`);
-        const span = document.createElement("span");
-        button.append(span);
-        span.className = "visuallyHidden";
-        span.setAttribute("data-l10n-id", "pdfjs-highlight-floating-button-label");
-        button.addEventListener("contextmenu", noContextMenu);
-        const myHide = () => this.hide()
+  #addHighlightButton() {
+    const button = document.createElement("button");
+    button.className = "highlightButton";
+    button.tabIndex = 0;
+    button.setAttribute("data-l10n-id", `pdfjs-highlight-floating-button1`);
+    const span = document.createElement("span");
+    button.append(span);
+    span.className = "visuallyHidden";
+    span.setAttribute("data-l10n-id", "pdfjs-highlight-floating-button-label");
+    const signal = this.#uiManager._signal;
+    button.addEventListener("contextmenu", noContextMenu, { signal });
+    const myHide = () => this.hide()
+    button.addEventListener(
+      "click",
+      async () => {
+        const selection = window.getSelection();
+        const selectedRange = selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+        const uiManager = this.#uiManager
 
-        button.addEventListener("click", async () => {
-            // Save the current selection before opening the dialog
-            const selection = window.getSelection();
-            const selectedRange = selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
-            const uiManager = this.#uiManager
-
-            const myFreshModal = await setupModal(selectedRange, selection, uiManager, myHide);
-            window.wiserEventBus.emit('showModal', myFreshModal);
-        });
-
-        this.#buttons.append(button);
-    }
+        const myFreshModal = await setupModal(selectedRange, selection, uiManager, myHide);
+window.wiserEventBus.emit('showModal', myFreshModal);
+      },
+      { signal }
+    );
+    this.#buttons.append(button);
+  }
 
 }
 

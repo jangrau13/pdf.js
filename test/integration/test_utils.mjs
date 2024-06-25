@@ -38,8 +38,13 @@ function loadAndWait(filename, selector, zoom, pageSetup, options) {
 
       let app_options = "";
       if (options) {
+        const optionsObject =
+          typeof options === "function"
+            ? await options(page, session.name)
+            : options;
+
         // Options must be handled in app.js::_parseHashParams.
-        for (const [key, value] of Object.entries(options)) {
+        for (const [key, value] of Object.entries(optionsObject)) {
           app_options += `&${key}=${encodeURIComponent(value)}`;
         }
       }
@@ -76,13 +81,16 @@ function awaitPromise(promise) {
 }
 
 function closePages(pages) {
-  return Promise.all(
-    pages.map(async ([_, page]) => {
-      // Avoid to keep something from a previous test.
-      await page.evaluate(() => window.localStorage.clear());
-      await page.close({ runBeforeUnload: false });
-    })
-  );
+  return Promise.all(pages.map(([_, page]) => closeSinglePage(page)));
+}
+
+async function closeSinglePage(page) {
+  // Avoid to keep something from a previous test.
+  await page.evaluate(async () => {
+    await window.PDFViewerApplication.testingClose();
+    window.localStorage.clear();
+  });
+  await page.close({ runBeforeUnload: false });
 }
 
 async function waitForSandboxTrip(page) {
@@ -122,6 +130,15 @@ async function clearInput(page, selector) {
 
 function getSelector(id) {
   return `[data-element-id="${id}"]`;
+}
+
+async function getRect(page, selector) {
+  // In Chrome something is wrong when serializing a `DomRect`,
+  // so we extract the values and return them ourselves.
+  return page.$eval(selector, el => {
+    const { x, y, width, height } = el.getBoundingClientRect();
+    return { x, y, width, height };
+  });
 }
 
 function getQuerySelector(id) {
@@ -216,6 +233,21 @@ async function waitForSerialized(page, nEntries) {
   );
 }
 
+async function applyFunctionToEditor(page, editorId, func) {
+  return page.evaluate(
+    (id, f) => {
+      const editor =
+        window.PDFViewerApplication.pdfDocument.annotationStorage.getRawValue(
+          id
+        );
+      // eslint-disable-next-line no-eval
+      eval(`(${f})`)(editor);
+    },
+    editorId,
+    func.toString()
+  );
+}
+
 async function waitForSelectedEditor(page, selector) {
   return page.waitForSelector(`${selector}.selectedEditor`);
 }
@@ -259,23 +291,18 @@ async function pasteFromClipboard(page, data, selector, timeout = 100) {
     const handle = await page.evaluateHandle(
       (sel, timeOut) => {
         let callback = null;
+        const element = sel ? document.querySelector(sel) : document;
         return [
           Promise.race([
             new Promise(resolve => {
               callback = e => resolve(e.clipboardData.items.length !== 0);
-              (sel ? document.querySelector(sel) : document).addEventListener(
-                "paste",
-                callback,
-                {
-                  once: true,
-                }
-              );
+              element.addEventListener("paste", callback, {
+                once: true,
+              });
             }),
             new Promise(resolve => {
               setTimeout(() => {
-                document
-                  .querySelector(sel)
-                  .removeEventListener("paste", callback);
+                element.removeEventListener("paste", callback);
                 resolve(false);
               }, timeOut);
             }),
@@ -294,7 +321,20 @@ async function getSerialized(page, filter = undefined) {
   const values = await page.evaluate(() => {
     const { map } =
       window.PDFViewerApplication.pdfDocument.annotationStorage.serializable;
-    return map ? [...map.values()] : [];
+    if (!map) {
+      return [];
+    }
+    const vals = Array.from(map.values());
+    for (const value of vals) {
+      for (const [k, v] of Object.entries(value)) {
+        // Puppeteer don't serialize typed array correctly, so we convert them
+        // to arrays.
+        if (ArrayBuffer.isView(v)) {
+          value[k] = Array.from(v);
+        }
+      }
+    }
+    return vals;
   });
   return filter ? values.map(filter) : values;
 }
@@ -427,10 +467,7 @@ async function firstPageOnTop(page) {
 }
 
 async function hover(page, selector) {
-  const rect = await page.$eval(selector, el => {
-    const { x, y, width, height } = el.getBoundingClientRect();
-    return { x, y, width, height };
-  });
+  const rect = await getRect(page, selector);
   await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
 }
 
@@ -575,10 +612,29 @@ async function kbFocusPrevious(page) {
   await awaitPromise(handle);
 }
 
+async function switchToEditor(name, page, disable = false) {
+  const modeChangedHandle = await createPromise(page, resolve => {
+    window.PDFViewerApplication.eventBus.on(
+      "annotationeditormodechanged",
+      resolve,
+      { once: true }
+    );
+  });
+  await page.click(`#editor${name}`);
+  name = name.toLowerCase();
+  await page.waitForSelector(
+    ".annotationEditorLayer" +
+      (disable ? `:not(.${name}Editing)` : `.${name}Editing`)
+  );
+  await awaitPromise(modeChangedHandle);
+}
+
 export {
+  applyFunctionToEditor,
   awaitPromise,
   clearInput,
   closePages,
+  closeSinglePage,
   createPromise,
   dragAndDropAnnotation,
   firstPageOnTop,
@@ -589,6 +645,7 @@ export {
   getEditorSelector,
   getFirstSerialized,
   getQuerySelector,
+  getRect,
   getSelectedEditors,
   getSelector,
   getSerialized,
@@ -615,6 +672,7 @@ export {
   pasteFromClipboard,
   scrollIntoView,
   serializeBitmapDimensions,
+  switchToEditor,
   waitForAnnotationEditorLayer,
   waitForEntryInStorage,
   waitForEvent,

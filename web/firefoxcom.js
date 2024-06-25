@@ -82,14 +82,6 @@ class FirefoxCom {
 class DownloadManager {
   #openBlobUrls = new WeakMap();
 
-  downloadUrl(url, filename, options = {}) {
-    FirefoxCom.request("download", {
-      originalUrl: url,
-      filename,
-      options,
-    });
-  }
-
   downloadData(data, filename, contentType) {
     const blobUrl = URL.createObjectURL(
       new Blob([data], { type: contentType })
@@ -140,8 +132,10 @@ class DownloadManager {
     return false;
   }
 
-  download(blob, url, filename, options = {}) {
-    const blobUrl = URL.createObjectURL(blob);
+  download(data, url, filename, options = {}) {
+    const blobUrl = data
+      ? URL.createObjectURL(new Blob([data], { type: "application/pdf" }))
+      : null;
 
     FirefoxCom.request("download", {
       blobUrl,

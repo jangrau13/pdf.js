@@ -13,19 +13,20 @@
  * limitations under the License.
  */
 
+/** @typedef {import("../src/display/api").PDFPageProxy} PDFPageProxy */
 // eslint-disable-next-line max-len
 /** @typedef {import("../src/display/display_utils").PageViewport} PageViewport */
-/** @typedef {import("../src/display/api").TextContent} TextContent */
 /** @typedef {import("./text_highlighter").TextHighlighter} TextHighlighter */
 // eslint-disable-next-line max-len
 /** @typedef {import("./text_accessibility.js").TextAccessibilityManager} TextAccessibilityManager */
 
-import { normalizeUnicode, renderTextLayer, updateTextLayer } from "pdfjs-lib";
+import { normalizeUnicode, TextLayer } from "pdfjs-lib";
 import { removeNullCharacters } from "./ui_utils.js";
 
 /**
  * @typedef {Object} TextLayerBuilderOptions
- * @property {TextHighlighter} highlighter - Optional object that will handle
+ * @property {PDFPageProxy} pdfPage
+ * @property {TextHighlighter} [highlighter] - Optional object that will handle
  *   highlighting text from the find controller.
  * @property {TextAccessibilityManager} [accessibilityManager]
  * @property {function} [onAppend]
@@ -41,27 +42,22 @@ class TextLayerBuilder {
 
   #onAppend = null;
 
-  #rotation = 0;
+  #renderingDone = false;
 
-  #scale = 0;
-
-  #textContentSource = null;
+  #textLayer = null;
 
   static #textLayers = new Map();
 
   static #selectionChangeAbortController = null;
 
   constructor({
+    pdfPage,
     highlighter = null,
     accessibilityManager = null,
     enablePermissions = false,
     onAppend = null,
   }) {
-    this.textContentItemsStr = [];
-    this.renderingDone = false;
-    this.textDivs = [];
-    this.textDivProperties = new WeakMap();
-    this.textLayerRenderTask = null;
+    this.pdfPage = pdfPage;
     this.highlighter = highlighter;
     this.accessibilityManager = accessibilityManager;
     this.#enablePermissions = enablePermissions === true;
@@ -72,68 +68,45 @@ class TextLayerBuilder {
     this.div.className = "textLayer";
   }
 
-  #finishRendering() {
-    this.renderingDone = true;
+  /**
+   * Renders the text layer.
+   * @param {PageViewport} viewport
+   * @param {Object} [textContentParams]
+   */
+  async render(viewport, textContentParams = null) {
+    if (this.#renderingDone && this.#textLayer) {
+      this.#textLayer.update({
+        viewport,
+        onBefore: this.hide.bind(this),
+      });
+      this.show();
+      return;
+    }
+
+    this.cancel();
+    this.#textLayer = new TextLayer({
+      textContentSource: this.pdfPage.streamTextContent(
+        textContentParams || {
+          includeMarkedContent: true,
+          disableNormalization: true,
+        }
+      ),
+      container: this.div,
+      viewport,
+    });
+
+    const { textDivs, textContentItemsStr } = this.#textLayer;
+    this.highlighter?.setTextMapping(textDivs, textContentItemsStr);
+    this.accessibilityManager?.setTextMapping(textDivs);
+
+    await this.#textLayer.render();
+    this.#renderingDone = true;
 
     const endOfContent = document.createElement("div");
     endOfContent.className = "endOfContent";
     this.div.append(endOfContent);
 
     this.#bindMouse(endOfContent);
-  }
-
-  get numTextDivs() {
-    return this.textDivs.length;
-  }
-
-  /**
-   * Renders the text layer.
-   * @param {PageViewport} viewport
-   */
-  async render(viewport) {
-    if (!this.#textContentSource) {
-      throw new Error('No "textContentSource" parameter specified.');
-    }
-
-    const scale = viewport.scale * (globalThis.devicePixelRatio || 1);
-    const { rotation } = viewport;
-    if (this.renderingDone) {
-      const mustRotate = rotation !== this.#rotation;
-      const mustRescale = scale !== this.#scale;
-      if (mustRotate || mustRescale) {
-        this.hide();
-        updateTextLayer({
-          container: this.div,
-          viewport,
-          textDivs: this.textDivs,
-          textDivProperties: this.textDivProperties,
-          mustRescale,
-          mustRotate,
-        });
-        this.#scale = scale;
-        this.#rotation = rotation;
-      }
-      this.show();
-      return;
-    }
-
-    this.cancel();
-    this.highlighter?.setTextMapping(this.textDivs, this.textContentItemsStr);
-    this.accessibilityManager?.setTextMapping(this.textDivs);
-
-    this.textLayerRenderTask = renderTextLayer({
-      textContentSource: this.#textContentSource,
-      container: this.div,
-      viewport,
-      textDivs: this.textDivs,
-      textDivProperties: this.textDivProperties,
-      textContentItemsStr: this.textContentItemsStr,
-    });
-
-    await this.textLayerRenderTask.promise;
-    this.#finishRendering();
-    this.#scale = scale;
-    this.#rotation = rotation;
     // Ensure that the textLayer is appended to the DOM *before* handling
     // e.g. a pending search operation.
     this.#onAppend?.(this.div);
@@ -142,7 +115,7 @@ class TextLayerBuilder {
   }
 
   hide() {
-    if (!this.div.hidden && this.renderingDone) {
+    if (!this.div.hidden && this.#renderingDone) {
       // We turn off the highlighter in order to avoid to scroll into view an
       // element of the text layer which could be hidden.
       this.highlighter?.disable();
@@ -151,7 +124,7 @@ class TextLayerBuilder {
   }
 
   show() {
-    if (this.div.hidden && this.renderingDone) {
+    if (this.div.hidden && this.#renderingDone) {
       this.div.hidden = false;
       this.highlighter?.enable();
     }
@@ -161,24 +134,12 @@ class TextLayerBuilder {
    * Cancel rendering of the text layer.
    */
   cancel() {
-    if (this.textLayerRenderTask) {
-      this.textLayerRenderTask.cancel();
-      this.textLayerRenderTask = null;
-    }
+    this.#textLayer?.cancel();
+    this.#textLayer = null;
+
     this.highlighter?.disable();
     this.accessibilityManager?.disable();
-    this.textContentItemsStr.length = 0;
-    this.textDivs.length = 0;
-    this.textDivProperties = new WeakMap();
     TextLayerBuilder.#removeGlobalSelectionListener(this.div);
-  }
-
-  /**
-   * @param {ReadableStream | TextContent} source
-   */
-  setTextContentSource(source) {
-    this.cancel();
-    this.#textContentSource = source;
   }
 
   /**
@@ -219,11 +180,12 @@ class TextLayerBuilder {
   }
 
   static #enableGlobalSelectionListener() {
-    if (TextLayerBuilder.#selectionChangeAbortController) {
+    if (this.#selectionChangeAbortController) {
       // document-level event listeners already installed
       return;
     }
-    TextLayerBuilder.#selectionChangeAbortController = new AbortController();
+    this.#selectionChangeAbortController = new AbortController();
+    const { signal } = this.#selectionChangeAbortController;
 
     const reset = (end, textLayer) => {
       if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
@@ -237,9 +199,9 @@ class TextLayerBuilder {
     document.addEventListener(
       "pointerup",
       () => {
-        TextLayerBuilder.#textLayers.forEach(reset);
+        this.#textLayers.forEach(reset);
       },
-      { signal: TextLayerBuilder.#selectionChangeAbortController.signal }
+      { signal }
     );
 
     if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
@@ -252,7 +214,7 @@ class TextLayerBuilder {
       () => {
         const selection = document.getSelection();
         if (selection.rangeCount === 0) {
-          TextLayerBuilder.#textLayers.forEach(reset);
+          this.#textLayers.forEach(reset);
           return;
         }
 
@@ -263,7 +225,7 @@ class TextLayerBuilder {
         const activeTextLayers = new Set();
         for (let i = 0; i < selection.rangeCount; i++) {
           const range = selection.getRangeAt(i);
-          for (const textLayerDiv of TextLayerBuilder.#textLayers.keys()) {
+          for (const textLayerDiv of this.#textLayers.keys()) {
             if (
               !activeTextLayers.has(textLayerDiv) &&
               range.intersectsNode(textLayerDiv)
@@ -273,7 +235,7 @@ class TextLayerBuilder {
           }
         }
 
-        for (const [textLayerDiv, endDiv] of TextLayerBuilder.#textLayers) {
+        for (const [textLayerDiv, endDiv] of this.#textLayers) {
           if (activeTextLayers.has(textLayerDiv)) {
             endDiv.classList.add("active");
           } else {
@@ -281,53 +243,50 @@ class TextLayerBuilder {
           }
         }
 
-        if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
-          if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("CHROME")) {
-            isFirefox = false;
-          } else {
-            isFirefox ??=
-              getComputedStyle(
-                TextLayerBuilder.#textLayers.values().next().value
-              ).getPropertyValue("-moz-user-select") === "none";
-          }
+        if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
+          return;
+        }
+        if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("CHROME")) {
+          isFirefox ??=
+            getComputedStyle(
+              this.#textLayers.values().next().value
+            ).getPropertyValue("-moz-user-select") === "none";
 
-          if (!isFirefox) {
-            // In non-Firefox browsers, when hovering over an empty space (thus,
-            // on .endOfContent), the selection will expand to cover all the
-            // text between the current selection and .endOfContent. By moving
-            // .endOfContent to right after (or before, depending on which side
-            // of the selection the user is moving), we limit the selection jump
-            // to at most cover the enteirety of the <span> where the selection
-            // is being modified.
-            const range = selection.getRangeAt(0);
-            const modifyStart =
-              prevRange &&
-              (range.compareBoundaryPoints(Range.END_TO_END, prevRange) === 0 ||
-                range.compareBoundaryPoints(Range.START_TO_END, prevRange) ===
-                  0);
-            let anchor = modifyStart
-              ? range.startContainer
-              : range.endContainer;
-            if (anchor.nodeType === Node.TEXT_NODE) {
-              anchor = anchor.parentNode;
-            }
-
-            const parentTextLayer = anchor.parentElement.closest(".textLayer");
-            const endDiv = TextLayerBuilder.#textLayers.get(parentTextLayer);
-            if (endDiv) {
-              endDiv.style.width = parentTextLayer.style.width;
-              endDiv.style.height = parentTextLayer.style.height;
-              anchor.parentElement.insertBefore(
-                endDiv,
-                modifyStart ? anchor : anchor.nextSibling
-              );
-            }
-
-            prevRange = range.cloneRange();
+          if (isFirefox) {
+            return;
           }
         }
+        // In non-Firefox browsers, when hovering over an empty space (thus,
+        // on .endOfContent), the selection will expand to cover all the
+        // text between the current selection and .endOfContent. By moving
+        // .endOfContent to right after (or before, depending on which side
+        // of the selection the user is moving), we limit the selection jump
+        // to at most cover the enteirety of the <span> where the selection
+        // is being modified.
+        const range = selection.getRangeAt(0);
+        const modifyStart =
+          prevRange &&
+          (range.compareBoundaryPoints(Range.END_TO_END, prevRange) === 0 ||
+            range.compareBoundaryPoints(Range.START_TO_END, prevRange) === 0);
+        let anchor = modifyStart ? range.startContainer : range.endContainer;
+        if (anchor.nodeType === Node.TEXT_NODE) {
+          anchor = anchor.parentNode;
+        }
+
+        const parentTextLayer = anchor.parentElement.closest(".textLayer");
+        const endDiv = this.#textLayers.get(parentTextLayer);
+        if (endDiv) {
+          endDiv.style.width = parentTextLayer.style.width;
+          endDiv.style.height = parentTextLayer.style.height;
+          anchor.parentElement.insertBefore(
+            endDiv,
+            modifyStart ? anchor : anchor.nextSibling
+          );
+        }
+
+        prevRange = range.cloneRange();
       },
-      { signal: TextLayerBuilder.#selectionChangeAbortController.signal }
+      { signal }
     );
   }
 }

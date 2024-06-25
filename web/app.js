@@ -159,6 +159,7 @@ const PDFViewerApplication = {
   _downloadUrl: "",
   _eventBusAbortController: null,
   _windowAbortController: null,
+  _globalAbortController: new AbortController(),
   documentInfo: null,
   metadata: null,
   _contentDispositionFilename: null,
@@ -359,10 +360,22 @@ const PDFViewerApplication = {
           params.get("highlighteditorcolors")
         );
       }
+      if (params.has("maxcanvaspixels")) {
+        AppOptions.set(
+          "maxCanvasPixels",
+          Number(params.get("maxcanvaspixels"))
+        );
+      }
       if (params.has("supportscaretbrowsingmode")) {
         AppOptions.set(
           "supportsCaretBrowsingMode",
           params.get("supportscaretbrowsingmode") === "true"
+        );
+      }
+      if (params.has("spreadmodeonload")) {
+        AppOptions.set(
+          "spreadModeOnLoad",
+          parseInt(params.get("spreadmodeonload"))
         );
       }
     }
@@ -432,6 +445,7 @@ const PDFViewerApplication = {
         )
       : null;
 
+    const enableHWA = AppOptions.get("enableHWA");
     const pdfViewer = new PDFViewer({
       container,
       viewer,
@@ -457,6 +471,8 @@ const PDFViewerApplication = {
       enablePermissions: AppOptions.get("enablePermissions"),
       pageColors,
       mlManager: this.mlManager,
+      abortSignal: this._globalAbortController.signal,
+      enableHWA,
     });
     this.pdfViewer = pdfViewer;
 
@@ -471,6 +487,8 @@ const PDFViewerApplication = {
         renderingQueue: pdfRenderingQueue,
         linkService: pdfLinkService,
         pageColors,
+        abortSignal: this._globalAbortController.signal,
+        enableHWA,
       });
       pdfRenderingQueue.setThumbnailViewer(this.pdfThumbnailViewer);
     }
@@ -666,18 +684,22 @@ const PDFViewerApplication = {
 
       // Enable dragging-and-dropping a new PDF file onto the viewerContainer.
       appConfig.mainContainer.addEventListener("dragover", function (evt) {
-        evt.preventDefault();
-
-        evt.dataTransfer.dropEffect =
-          evt.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
+        for (const item of evt.dataTransfer.items) {
+          if (item.type === "application/pdf") {
+            evt.dataTransfer.dropEffect =
+              evt.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
+            evt.preventDefault();
+            evt.stopPropagation();
+            return;
+          }
+        }
       });
       appConfig.mainContainer.addEventListener("drop", function (evt) {
-        evt.preventDefault();
-
-        const { files } = evt.dataTransfer;
-        if (!files || files.length === 0) {
+        if (evt.dataTransfer.files?.[0].type !== "application/pdf") {
           return;
         }
+        evt.preventDefault();
+        evt.stopPropagation();
         eventBus.dispatch("fileinputchange", {
           source: this,
           fileInput: evt.dataTransfer,
@@ -742,26 +764,24 @@ const PDFViewerApplication = {
     return this._initializedCapability.promise;
   },
 
-  zoomIn(steps, scaleFactor) {
+  updateZoom(steps, scaleFactor, origin) {
     if (this.pdfViewer.isInPresentationMode) {
       return;
     }
-    this.pdfViewer.increaseScale({
+    this.pdfViewer.updateScale({
       drawingDelay: AppOptions.get("defaultZoomDelay"),
       steps,
       scaleFactor,
+      origin,
     });
   },
 
-  zoomOut(steps, scaleFactor) {
-    if (this.pdfViewer.isInPresentationMode) {
-      return;
-    }
-    this.pdfViewer.decreaseScale({
-      drawingDelay: AppOptions.get("defaultZoomDelay"),
-      steps,
-      scaleFactor,
-    });
+  zoomIn() {
+    this.updateZoom(1);
+  },
+
+  zoomOut() {
+    this.updateZoom(-1);
   },
 
   zoomReset() {
@@ -915,7 +935,8 @@ const PDFViewerApplication = {
       return;
     }
     if (
-      (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
+      (typeof PDFJSDev === "undefined" ||
+        PDFJSDev.test("GENERIC && !TESTING")) &&
       this.pdfDocument?.annotationStorage.size > 0 &&
       this._annotationStorageModified
     ) {
@@ -1008,6 +1029,16 @@ const PDFViewerApplication = {
       AppOptions.set("docBaseUrl", this.baseUrl);
     }
 
+    // On Android, there is almost no chance to have the font we want so we
+    // don't use the system fonts in this case.
+    if (
+      typeof PDFJSDev === "undefined"
+        ? window.isGECKOVIEW
+        : PDFJSDev.test("GECKOVIEW")
+    ) {
+      args.useSystemFonts = false;
+    }
+
     // Set the necessary API parameters, using all the available options.
     const apiParams = AppOptions.getAll(OptionKind.API);
     const loadingTask = getDocument({
@@ -1070,22 +1101,22 @@ const PDFViewerApplication = {
   },
 
   async download(options = {}) {
-    const url = this._downloadUrl,
-      filename = this._docFilename;
+    let data;
     try {
-      this._ensureDownloadComplete();
-
-      const data = await this.pdfDocument.getData();
-      const blob = new Blob([data], { type: "application/pdf" });
-
-      await this.downloadManager.download(blob, url, filename, options);
-      // TODO: let the user decide whether to save it on axum or download it manually
+      if (this.downloadComplete) {
+        data = await this.pdfDocument.getData();
+      }
     } catch {
       // When the PDF document isn't ready, or the PDF file is still
       // downloading, simply download using the URL.
-      //await this.downloadManager.downloadUrl(url, filename, options);
-      // TODO: let the user decide whether to save it on axum or download it manually
+        //TODO: WISER: adjust for our usecase
     }
+    this.downloadManager.download(
+      data,
+      this._downloadUrl,
+      this._docFilename,
+      options
+    );
   },
 
   async save(options = {}) {
@@ -1095,18 +1126,16 @@ const PDFViewerApplication = {
     this._saveInProgress = true;
     await this.pdfScriptingManager.dispatchWillSave();
 
-    const url = this._downloadUrl,
-      filename = this._docFilename;
     try {
-      this._ensureDownloadComplete();
-
       const data = await this.pdfDocument.saveDocument();
-      const blob = new Blob([data], { type: "application/pdf" });
-
-      await this.downloadManager.download(blob, url, filename, options);
+      this.downloadManager.download(
+        data,
+        this._downloadUrl,
+        this._docFilename,
+        options
+      );
     } catch (reason) {
-      // When the PDF document isn't ready, or the PDF file is still
-      // downloading, simply fallback to a "regular" download.
+      // When the PDF document isn't ready, fallback to a "regular" download.
       console.error(`Error when saving the document: ${reason.message}`);
       await this.download(options);
     } finally {
@@ -1125,12 +1154,19 @@ const PDFViewerApplication = {
     }
   },
 
-  downloadOrSave(options = {}) {
-    if (this.pdfDocument?.annotationStorage.size > 0) {
-      this.save(options);
-    } else {
-      this.download(options);
-    }
+  async downloadOrSave(options = {}) {
+    // In the Firefox case, this method MUST always trigger a download.
+    // When the user is closing a modified and unsaved document, we display a
+    // prompt asking for saving or not. In case they save, we must wait for
+    // saving to complete before closing the tab.
+    // So in case this function does not trigger a download, we must trigger a
+    // a message and change PdfjsChild.sys.mjs to take it into account.
+    const { classList } = this.appConfig.appContainer;
+    classList.add("wait");
+    await (this.pdfDocument?.annotationStorage.size > 0
+      ? this.save(options)
+      : this.download(options));
+    classList.remove("wait");
   },
 
   /**
@@ -2092,6 +2128,21 @@ const PDFViewerApplication = {
     this._windowAbortController = null;
   },
 
+  /**
+   * @ignore
+   */
+  async testingClose() {
+    this.unbindEvents();
+    this.unbindWindowEvents();
+
+    this._globalAbortController?.abort();
+    this._globalAbortController = null;
+
+    this.findBar?.close();
+
+    await Promise.all([this.l10n?.destroy(), this.close()]);
+  },
+
   _accumulateTicks(ticks, prop) {
     // If the direction changed, reset the accumulated ticks.
     if ((this[prop] > 0 && ticks < 0) || (this[prop] < 0 && ticks > 0)) {
@@ -2118,16 +2169,6 @@ const PDFViewerApplication = {
     this[prop] = factor / newFactor;
 
     return newFactor;
-  },
-
-  _centerAtPos(previousScale, x, y) {
-    const { pdfViewer } = this;
-    const scaleDiff = pdfViewer.currentScale / previousScale - 1;
-    if (scaleDiff !== 0) {
-      const [top, left] = pdfViewer.containerTopLeft;
-      pdfViewer.container.scrollLeft += (x - left) * scaleDiff;
-      pdfViewer.container.scrollTop += (y - top) * scaleDiff;
-    }
   },
 
   /**
@@ -2495,6 +2536,7 @@ function webViewerUpdateFindMatchesCount({ matchesCount }) {
 function webViewerUpdateFindControlState({
   state,
   previous,
+  entireWord,
   matchesCount,
   rawQuery,
 }) {
@@ -2502,6 +2544,7 @@ function webViewerUpdateFindControlState({
     PDFViewerApplication.externalServices.updateFindControlState({
       result: state,
       findPrevious: previous,
+      entireWord,
       matchesCount,
       rawQuery,
     });
@@ -2606,6 +2649,7 @@ function webViewerWheel(evt) {
     evt.deltaX === 0 &&
     (Math.abs(scaleFactor - 1) < 0.05 || isBuiltInMac) &&
     evt.deltaZ === 0;
+  const origin = [evt.clientX, evt.clientY];
 
   if (
     isPinchToZoom ||
@@ -2624,20 +2668,13 @@ function webViewerWheel(evt) {
       return;
     }
 
-    const previousScale = pdfViewer.currentScale;
     if (isPinchToZoom && supportsPinchToZoom) {
       scaleFactor = PDFViewerApplication._accumulateFactor(
-        previousScale,
+        pdfViewer.currentScale,
         scaleFactor,
         "_wheelUnusedFactor"
       );
-      if (scaleFactor < 1) {
-        PDFViewerApplication.zoomOut(null, scaleFactor);
-      } else if (scaleFactor > 1) {
-        PDFViewerApplication.zoomIn(null, scaleFactor);
-      } else {
-        return;
-      }
+      PDFViewerApplication.updateZoom(null, scaleFactor, origin);
     } else {
       const delta = normalizeWheelEventDirection(evt);
 
@@ -2669,19 +2706,8 @@ function webViewerWheel(evt) {
         );
       }
 
-      if (ticks < 0) {
-        PDFViewerApplication.zoomOut(-ticks);
-      } else if (ticks > 0) {
-        PDFViewerApplication.zoomIn(ticks);
-      } else {
-        return;
-      }
+      PDFViewerApplication.updateZoom(ticks, null, origin);
     }
-
-    // After scaling the page via zoomIn/zoomOut, the position of the upper-
-    // left corner is restored. When the mouse wheel is used, the position
-    // under the cursor should be restored instead.
-    PDFViewerApplication._centerAtPos(previousScale, evt.clientX, evt.clientY);
   }
 }
 
@@ -2781,42 +2807,24 @@ function webViewerTouchMove(evt) {
 
   evt.preventDefault();
 
+  const origin = [(page0X + page1X) / 2, (page0Y + page1Y) / 2];
   const distance = Math.hypot(page0X - page1X, page0Y - page1Y) || 1;
   const pDistance = Math.hypot(pTouch0X - pTouch1X, pTouch0Y - pTouch1Y) || 1;
-  const previousScale = pdfViewer.currentScale;
   if (supportsPinchToZoom) {
     const newScaleFactor = PDFViewerApplication._accumulateFactor(
-      previousScale,
+      pdfViewer.currentScale,
       distance / pDistance,
       "_touchUnusedFactor"
     );
-    if (newScaleFactor < 1) {
-      PDFViewerApplication.zoomOut(null, newScaleFactor);
-    } else if (newScaleFactor > 1) {
-      PDFViewerApplication.zoomIn(null, newScaleFactor);
-    } else {
-      return;
-    }
+    PDFViewerApplication.updateZoom(null, newScaleFactor, origin);
   } else {
     const PIXELS_PER_LINE_SCALE = 30;
     const ticks = PDFViewerApplication._accumulateTicks(
       (distance - pDistance) / PIXELS_PER_LINE_SCALE,
       "_touchUnusedTicks"
     );
-    if (ticks < 0) {
-      PDFViewerApplication.zoomOut(-ticks);
-    } else if (ticks > 0) {
-      PDFViewerApplication.zoomIn(ticks);
-    } else {
-      return;
-    }
+    PDFViewerApplication.updateZoom(ticks, null, origin);
   }
-
-  PDFViewerApplication._centerAtPos(
-    previousScale,
-    (page0X + page1X) / 2,
-    (page0Y + page1Y) / 2
-  );
 }
 
 function webViewerTouchEnd(evt) {
