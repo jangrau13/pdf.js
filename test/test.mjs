@@ -884,6 +884,7 @@ async function startBrowser({
   const options = {
     product: browserName,
     protocol: "cdp",
+    dumpio: true,
     headless,
     defaultViewport: null,
     ignoreDefaultArgs: ["--disable-extensions"],
@@ -915,6 +916,8 @@ async function startBrowser({
     options.protocol = "webDriverBiDi";
 
     options.extraPrefsFirefox = {
+      // Disable system addon updates.
+      "extensions.systemAddon.update.enabled": false,
       // avoid to have a prompt when leaving a page with a form
       "dom.disable_beforeunload": true,
       // Disable dialog when saving a pdf

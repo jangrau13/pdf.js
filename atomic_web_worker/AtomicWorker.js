@@ -1,5 +1,7 @@
 import {Agent, core, Resource, Store, CollectionBuilder} from "@tomic/lib";
 import * as cheerio from 'cheerio';
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
 
 const store = new Store();
 let myAgent;
@@ -68,6 +70,7 @@ function delay(time) {
 }
 
 async function handleRetrieveConcepts() {
+    log.info('AtomicWorker', 'handleRetrieveConcepts');
     await delay(500);
     const concepts = await store.getResourceAsync(myAgent.subject);
     const classes = concepts.get("https://wiser-sp4.interactions.ics.unisg.ch/property/knows-concepts");
@@ -126,6 +129,7 @@ async function handleRetrieveConcepts() {
 
 
 async function handleCheckbox(myVisual, container, infoToLookFor) {
+    log.info('AtomicWorker', 'handleCheckbox')
     const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
     //console.log('handleCheckbox', inputFor)
     const inputInfos = await store.getResourceAsync(inputFor);
@@ -143,6 +147,7 @@ async function handleCheckbox(myVisual, container, infoToLookFor) {
 }
 
 async function handleTextArea(myVisual, container, selectedText = '', infoToLookFor) {
+    log.info('AtomicWorker', 'handleTextArea')
     const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
     //console.log('handleTextArea', inputFor)
     const inputInfos = await store.getResourceAsync(inputFor);
@@ -170,6 +175,7 @@ async function handleTextArea(myVisual, container, selectedText = '', infoToLook
 }
 
 async function handleImageInserter(myVisual, container, selectedText, infoToLookFor) {
+    log.info('AtomicWorker', 'handleImageInserter')
     const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
     //console.log('handleImageInserter', inputFor)
     const individualID = inputFor;
@@ -277,15 +283,16 @@ waitForElement('${inputFor}-description', (textarea) => {
 }
 
 async function handleDropDown(myVisual, container, selectedText, infoToLookFor) {
+    log.info('AtomicWorker', 'handleDropdown')
     const inputFor = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/is-input-for");
-    console.log('handleDropdown', inputFor)
+    //console.log('handleDropdown', inputFor)
     const optionClass = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/option-class");
     let listName = ""
     let myClasses = []
     if (!optionClass) {
         // then there I am aiming for something bigger
         let optionParentClass = myVisual.get("https://wiser-sp4.interactions.ics.unisg.ch/property/option-parent-class")
-        console.log('dropdown heading for', optionParentClass)
+        //console.log('dropdown heading for', optionParentClass)
         let parentRes = await store.getResourceAsync(optionParentClass);
         let parentClasses = parentRes.get("https://atomicdata.dev/properties/classes");
         let finalMyClassesContainingDuplicates = []
@@ -296,9 +303,8 @@ async function handleDropDown(myVisual, container, selectedText, infoToLookFor) 
                 .setPageSize(100)
                 .build();
             let tmpMembers = await blogCollection.getAllMembers(); // string[]
-            console.log('may I present? all the members of', parentClass)
             for (const member of tmpMembers) {
-                console.log('push member', member)
+                //console.log('push member', member)
                 finalMyClassesContainingDuplicates.push(member)
             }
         }
@@ -403,7 +409,8 @@ function getLastPartOfURL(url) {
 }
 
 async function createModal(url, magic, selectedText = '') {
-    console.log('going for concept', url)
+    log.info('AtomicWorker', 'createModal')
+    //console.log('going for concept', url)
     const concept = await store.getResourceAsync(url)
     const lastPart = getLastPartOfURL(url)
     const potentialSubject = store.createSubject(lastPart)
@@ -460,6 +467,7 @@ async function createModal(url, magic, selectedText = '') {
 }
 
 async function handleKnowledgeUpdate(message) {
+    log.info('AtomicWorker', 'handleKnowledgeUpdate')
     // Retrieve elements with the class 'rdfa_content' and their children
     const $ = cheerio.load(message.document);
     const rdfasInHTML = $('.rdfa-content')
@@ -476,7 +484,7 @@ async function handleKnowledgeUpdate(message) {
                 const newSubject = potentialID
                 //TODO: check for the same WISER-ID
                 if (await store.checkSubjectTaken(newSubject)) {
-                    console.log("subject already taken, react to it", newSubject)
+                    //console.log("subject already taken, react to it", newSubject)
                     //return
                 } else {
                     const newResource = new Resource(newSubject);
@@ -569,6 +577,24 @@ onmessage = async (e) => {
 
 
 async function init() {
+    log.setLevel("INFO", true)
+    log.noConflict()
+    prefix.reg(log);
+
+    prefix.apply(log, {
+        template: '[%t] %l (%n):',
+        levelFormatter(level) {
+            return level.toUpperCase();
+        },
+        nameFormatter(name) {
+            return name || 'atomic worker';
+        },
+        timestampFormatter(date) {
+            return date.toISOString();
+        },
+    });
+
+    log.info('AtomicWorker', 'init')
     const serverURL = "https://wiser-sp4.interactions.ics.unisg.ch";
     await store.setServerUrl(serverURL);
 
@@ -589,6 +615,7 @@ async function init() {
 }
 
 async function handleGetResource(url) {
+    log.info('AtomicWorker', 'handleGetResource')
     try {
         const newResource = await store.getResourceAsync(url);
         const shortName = newResource.get("https://atomicdata.dev/properties/shortname");

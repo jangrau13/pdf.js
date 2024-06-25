@@ -21,7 +21,24 @@ import {PDFViewerApplication} from "./app.js";
 import {RdfaParser} from "rdfa-streaming-parser";
 import WiserEventBus from "./WiserEventBus.js";
 import {handleConceptButtons, handleUpdatePDFAfterKGAdd} from "./modals/workerHandler.js";
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
 
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+    template: '[%t] %l (%n):',
+    levelFormatter(level) {
+        return level.toUpperCase();
+    },
+    nameFormatter(name) {
+        return name || 'viewer.js';
+    },
+    timestampFormatter(date) {
+        return date.toISOString();
+    },
+});
 
 /* eslint-disable-next-line no-unused-vars */
 const pdfjsVersion =
@@ -34,13 +51,12 @@ const AppConstants =
     typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")
         ? {LinkTarget, RenderingStates, ScrollMode, SpreadMode}
         : null;
-
-
 window.PDFViewerApplication = PDFViewerApplication;
 window.PDFViewerApplicationConstants = AppConstants;
 window.PDFViewerApplicationOptions = AppOptions;
 
 function getViewerConfiguration() {
+    log.info('changing appContainer to janpdf (customized)')
     return {
         appContainer: document.getElementById("janpdf"),
         mainContainer: document.getElementById("viewerContainer"),
@@ -212,9 +228,6 @@ function webViewerLoad() {
         }
     }
     PDFViewerApplication.run(config);
-
-    // added by Jan
-
 }
 
 // Block the "load" event until all pages are loaded, to ensure that printing
@@ -227,10 +240,12 @@ if (
 ) {
 
     //add by Jan
+    log.info('setting up atomic worker and wiser Eventbus')
     window.myAtomicWorker = new Worker("/v1/api/pdf_api/js/atomic.worker.js")
     window.WiserEventBus = WiserEventBus
 
     /*
+    log.info('setup RDFa Parser')
     const myParser = new RdfaParser({
         baseIRI: window.location.href,
         contentType: "text/html",
@@ -239,8 +254,6 @@ if (
     window.myParser = myParser;
 
      */
-
-
     // done adding
     webViewerLoad();
 } else {
@@ -257,6 +270,7 @@ export {
 // code by WISER inc
 class Modal {
     constructor() {
+        log.info('constructing acutal modal')
         this.modalRoot = document.getElementById('modal-root');
         this.initStore().then((success) => {
             WiserEventBus.on('showModal', this.showModal.bind(this));
@@ -274,6 +288,7 @@ class Modal {
     }
 
     async initStore() {
+        log.info('init Atomic Store')
         window.myAtomicWorker.onmessage = async (e) => {
             switch (e.data.type) {
                 case "pong":
@@ -319,6 +334,7 @@ class Modal {
      * @param {IModal} modal - An object that implements the IModal interface.
      */
     async showModal(modal) {
+        log.info('acutal show of the modal')
         this.clearModal();
 
         const modalOverlay = document.createElement('div');
@@ -357,6 +373,7 @@ class Modal {
     }
 
     clearModal() {
+        log.info('modal clearance');
         this.modalRoot.innerHTML = '';
     }
 }

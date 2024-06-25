@@ -70,8 +70,8 @@ import { SimpleLinkService } from "./pdf_link_service.js";
 const DEFAULT_CACHE_SIZE = 10;
 
 const PagesCountLimit = {
-  FORCE_SCROLL_MODE_PAGE: 15000,
-  FORCE_LAZY_PAGE_INIT: 7500,
+  FORCE_SCROLL_MODE_PAGE: 10000,
+  FORCE_LAZY_PAGE_INIT: 5000,
   PAUSE_EAGER_PAGE_INIT: 250,
 };
 
@@ -123,6 +123,8 @@ function isValidAnnotationEditorMode(mode) {
  * @property {Object} [pageColors] - Overwrites background and foreground colors
  *   with user defined ones in order to improve readability in high contrast
  *   mode.
+ * @property {boolean} [enableHWA] - Enables hardware acceleration for
+ *   rendering. The default value is `false`.
  */
 
 class PDFPageViewBuffer {
@@ -211,6 +213,8 @@ class PDFViewer {
 
   #containerTopLeft = null;
 
+  #enableHWA = false;
+
   #enableHighlightFloatingButton = false;
 
   #enablePermissions = false;
@@ -296,6 +300,7 @@ class PDFViewer {
     this.#enablePermissions = options.enablePermissions || false;
     this.pageColors = options.pageColors || null;
     this.#mlManager = options.mlManager || null;
+    this.#enableHWA = options.enableHWA || false;
 
     this.defaultRenderingQueue = !options.renderingQueue;
     if (
@@ -309,7 +314,21 @@ class PDFViewer {
       this.renderingQueue = options.renderingQueue;
     }
 
-    this.scroll = watchScroll(this.container, this._scrollUpdate.bind(this));
+    const { abortSignal } = options;
+    abortSignal?.addEventListener(
+      "abort",
+      () => {
+        this.#resizeObserver.disconnect();
+        this.#resizeObserver = null;
+      },
+      { once: true }
+    );
+
+    this.scroll = watchScroll(
+      this.container,
+      this._scrollUpdate.bind(this),
+      abortSignal
+    );
     this.presentationModeState = PresentationModeState.UNKNOWN;
     this._resetView();
 
@@ -721,12 +740,15 @@ class PDFViewer {
       // getAllText and we could just get text from the Selection object.
 
       // Select all the document.
-      const savedCursor = this.container.style.cursor;
-      this.container.style.cursor = "wait";
+      const { classList } = this.viewer;
+      classList.add("copyAll");
 
-      const interruptCopy = ev =>
-        (this.#interruptCopyCondition = ev.key === "Escape");
-      window.addEventListener("keydown", interruptCopy);
+      const ac = new AbortController();
+      window.addEventListener(
+        "keydown",
+        ev => (this.#interruptCopyCondition = ev.key === "Escape"),
+        { signal: ac.signal }
+      );
 
       this.getAllText()
         .then(async text => {
@@ -742,8 +764,8 @@ class PDFViewer {
         .finally(() => {
           this.#getAllTextInProgress = false;
           this.#interruptCopyCondition = false;
-          window.removeEventListener("keydown", interruptCopy);
-          this.container.style.cursor = savedCursor;
+          ac.abort();
+          classList.remove("copyAll");
         });
 
       event.preventDefault();
@@ -929,6 +951,7 @@ class PDFViewer {
             pageColors,
             l10n: this.l10n,
             layerProperties: this._layerProperties,
+            enableHWA: this.#enableHWA,
           });
           this._pages.push(pageView);
         }
@@ -1219,7 +1242,7 @@ class PDFViewer {
   #setScaleUpdatePages(
     newScale,
     newValue,
-    { noScroll = false, preset = false, drawingDelay = -1 }
+    { noScroll = false, preset = false, drawingDelay = -1, origin = null }
   ) {
     this._currentScaleValue = newValue.toString();
 
@@ -1252,6 +1275,7 @@ class PDFViewer {
       }, drawingDelay);
     }
 
+    const previousScale = this._currentScale;
     this._currentScale = newScale;
 
     if (!noScroll) {
@@ -1275,6 +1299,15 @@ class PDFViewer {
         destArray: dest,
         allowNegativeOffset: true,
       });
+      if (Array.isArray(origin)) {
+        // If the origin of the scaling transform is specified, preserve its
+        // location on screen. If not specified, scaling will fix the top-left
+        // corner of the visible PDF area.
+        const scaleDiff = newScale / previousScale - 1;
+        const [top, left] = this.containerTopLeft;
+        this.container.scrollLeft += (origin[0] - left) * scaleDiff;
+        this.container.scrollTop += (origin[1] - top) * scaleDiff;
+      }
     }
 
     this.eventBus.dispatch("scalechanging", {
@@ -2122,54 +2155,52 @@ class PDFViewer {
    * @property {number} [drawingDelay]
    * @property {number} [scaleFactor]
    * @property {number} [steps]
+   * @property {Array} [origin] x and y coordinates of the scale
+   *                            transformation origin.
    */
+
+  /**
+   * Changes the current zoom level by the specified amount.
+   * @param {ChangeScaleOptions} [options]
+   */
+  updateScale({ drawingDelay, scaleFactor = null, steps = null, origin }) {
+    if (steps === null && scaleFactor === null) {
+      throw new Error(
+        "Invalid updateScale options: either `steps` or `scaleFactor` must be provided."
+      );
+    }
+    if (!this.pdfDocument) {
+      return;
+    }
+    let newScale = this._currentScale;
+    if (scaleFactor > 0 && scaleFactor !== 1) {
+      newScale = Math.round(newScale * scaleFactor * 100) / 100;
+    } else if (steps) {
+      const delta = steps > 0 ? DEFAULT_SCALE_DELTA : 1 / DEFAULT_SCALE_DELTA;
+      const round = steps > 0 ? Math.ceil : Math.floor;
+      steps = Math.abs(steps);
+      do {
+        newScale = round((newScale * delta).toFixed(2) * 10) / 10;
+      } while (--steps > 0);
+    }
+    newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+    this.#setScale(newScale, { noScroll: false, drawingDelay, origin });
+  }
 
   /**
    * Increase the current zoom level one, or more, times.
    * @param {ChangeScaleOptions} [options]
    */
-  increaseScale({ drawingDelay, scaleFactor, steps } = {}) {
-    if (!this.pdfDocument) {
-      return;
-    }
-    let newScale = this._currentScale;
-    if (scaleFactor > 1) {
-      newScale = Math.round(newScale * scaleFactor * 100) / 100;
-    } else {
-      steps ??= 1;
-      do {
-        newScale =
-          Math.ceil((newScale * DEFAULT_SCALE_DELTA).toFixed(2) * 10) / 10;
-      } while (--steps > 0 && newScale < MAX_SCALE);
-    }
-    this.#setScale(Math.min(MAX_SCALE, newScale), {
-      noScroll: false,
-      drawingDelay,
-    });
+  increaseScale(options = {}) {
+    this.updateScale({ ...options, steps: options.steps ?? 1 });
   }
 
   /**
    * Decrease the current zoom level one, or more, times.
    * @param {ChangeScaleOptions} [options]
    */
-  decreaseScale({ drawingDelay, scaleFactor, steps } = {}) {
-    if (!this.pdfDocument) {
-      return;
-    }
-    let newScale = this._currentScale;
-    if (scaleFactor > 0 && scaleFactor < 1) {
-      newScale = Math.round(newScale * scaleFactor * 100) / 100;
-    } else {
-      steps ??= 1;
-      do {
-        newScale =
-          Math.floor((newScale / DEFAULT_SCALE_DELTA).toFixed(2) * 10) / 10;
-      } while (--steps > 0 && newScale > MIN_SCALE);
-    }
-    this.#setScale(Math.max(MIN_SCALE, newScale), {
-      noScroll: false,
-      drawingDelay,
-    });
+  decreaseScale(options = {}) {
+    this.updateScale({ ...options, steps: -(options.steps ?? 1) });
   }
 
   #updateContainerHeightCss(height = this.container.clientHeight) {

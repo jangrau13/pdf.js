@@ -25,6 +25,25 @@ import { AnnotationEditor } from "./editor.js";
 import { ColorPicker } from "./color_picker.js";
 import { noContextMenu } from "../display_utils.js";
 
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+  template: '[%t] %l (%n):',
+  levelFormatter(level) {
+    return level.toUpperCase();
+  },
+  nameFormatter(name) {
+    return name || 'highlight.js';
+  },
+  timestampFormatter(date) {
+    return date.toISOString();
+  },
+});
+
 /**
  * Basic draw editor in order to generate an Highlight annotation.
  */
@@ -111,6 +130,8 @@ class HighlightEditor extends AnnotationEditor {
     this.#text = params.text || "";
     this._isDraggable = false;
 
+    // get input Modal, read it and remove it
+    log.info('get input from modal')
     const storedInput = document.getElementById('rdfa-tmp-storage').getAttribute('data-user-input')
     if (storedInput) {
       this.#rdfa_content = storedInput;
@@ -384,6 +405,7 @@ class HighlightEditor extends AnnotationEditor {
     }
     if (this._uiManager.highlightColors) {
       this.#colorPicker = new ColorPicker({ editor: this });
+      log.info('here we could add more picker icons')
       //toolbar.addColorPicker(this.#colorPicker);
       //toolbar.addJanEditorTool();
     }
@@ -574,6 +596,7 @@ class HighlightEditor extends AnnotationEditor {
       div.setAttribute("aria-label", this.#text);
       div.setAttribute("role", "mark");
     }
+    log.info('testing for rdfa content', this.#rdfa_content)
     if (this.#rdfa_content) {
       const innerRdfa = document.createElement("div");
       innerRdfa.setAttribute("id", "rdfa-"+ this.#id)
@@ -585,7 +608,9 @@ class HighlightEditor extends AnnotationEditor {
     if (this.#isFreeHighlight) {
       div.classList.add("free");
     } else {
-      this.div.addEventListener("keydown", this.#boundKeydown);
+      this.div.addEventListener("keydown", this.#boundKeydown, {
+        signal: this._uiManager._signal,
+      });
     }
     const highlightDiv = (this.#highlightDiv = document.createElement("div"));
     div.append(highlightDiv);
@@ -687,7 +712,7 @@ class HighlightEditor extends AnnotationEditor {
     }
     const [pageWidth, pageHeight] = this.pageDimensions;
     const boxes = this.#boxes;
-    const quadPoints = new Array(boxes.length * 8);
+    const quadPoints = new Float32Array(boxes.length * 8);
     let i = 0;
     for (const { x, y, width, height } of boxes) {
       const sx = x * pageWidth;
@@ -719,7 +744,8 @@ class HighlightEditor extends AnnotationEditor {
     const pointerMove = e => {
       this.#highlightMove(parent, e);
     };
-    const pointerDownOptions = { capture: true, passive: false };
+    const signal = parent._signal;
+    const pointerDownOptions = { capture: true, passive: false, signal };
     const pointerDown = e => {
       // Avoid to have undesired clicks during the drawing.
       e.preventDefault();
@@ -737,12 +763,12 @@ class HighlightEditor extends AnnotationEditor {
       window.removeEventListener("contextmenu", noContextMenu);
       this.#endHighlight(parent, e);
     };
-    window.addEventListener("blur", pointerUpCallback);
-    window.addEventListener("pointerup", pointerUpCallback);
+    window.addEventListener("blur", pointerUpCallback, { signal });
+    window.addEventListener("pointerup", pointerUpCallback, { signal });
     window.addEventListener("pointerdown", pointerDown, pointerDownOptions);
-    window.addEventListener("contextmenu", noContextMenu);
+    window.addEventListener("contextmenu", noContextMenu, { signal });
 
-    textLayer.addEventListener("pointermove", pointerMove);
+    textLayer.addEventListener("pointermove", pointerMove, { signal });
     this._freeHighlight = new FreeOutliner(
       { x, y },
       [layerX, layerY, parentWidth, parentHeight],

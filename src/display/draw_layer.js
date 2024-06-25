@@ -15,6 +15,24 @@
 
 import { DOMSVGFactory } from "./display_utils.js";
 import { shadow } from "../shared/util.js";
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+  template: '[%t] %l (%n):',
+  levelFormatter(level) {
+    return level.toUpperCase();
+  },
+  nameFormatter(name) {
+    return name || 'draw_layer.js';
+  },
+  timestampFormatter(date) {
+    return date.toISOString();
+  },
+});
 
 /**
  * Manage the SVGs drawn on top of the page canvas.
@@ -214,7 +232,6 @@ class DrawLayer {
   }
 
   changeOpacity(id, opacity) {
-    console.log("draw opacity", opacity)
     this.#mapping.get(id).setAttribute("fill-opacity", opacity);
   }
 

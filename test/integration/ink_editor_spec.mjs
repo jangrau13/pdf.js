@@ -18,12 +18,14 @@ import {
   closePages,
   createPromise,
   getEditorSelector,
+  getRect,
   getSelectedEditors,
   kbRedo,
   kbSelectAll,
   kbUndo,
   loadAndWait,
   scrollIntoView,
+  switchToEditor,
   waitForSerialized,
   waitForStorageEntries,
 } from "./test_utils.mjs";
@@ -51,6 +53,8 @@ const commit = async page => {
   await page.waitForSelector(".inkEditor.selectedEditor.draggable.disabled");
 };
 
+const switchToInk = switchToEditor.bind(null, "Ink");
+
 describe("Ink Editor", () => {
   describe("Basic operations", () => {
     let pages;
@@ -66,14 +70,9 @@ describe("Ink Editor", () => {
     it("must draw, undo a deletion and check that the editors are not selected", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorInk");
+          await switchToInk(page);
 
-          const rect = await page.$eval(".annotationEditorLayer", el => {
-            // With Chrome something is wrong when serializing a DomRect,
-            // hence we extract the values and just return them.
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rect = await getRect(page, ".annotationEditorLayer");
 
           for (let i = 0; i < 3; i++) {
             const x = rect.x + 100 + i * 100;
@@ -105,12 +104,7 @@ describe("Ink Editor", () => {
         pages.map(async ([browserName, page]) => {
           await clearAll(page);
 
-          const rect = await page.$eval(".annotationEditorLayer", el => {
-            // With Chrome something is wrong when serializing a DomRect,
-            // hence we extract the values and just return them.
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rect = await getRect(page, ".annotationEditorLayer");
 
           const xStart = rect.x + 300;
           const yStart = rect.y + 300;
@@ -123,10 +117,7 @@ describe("Ink Editor", () => {
 
           await commit(page);
 
-          const rectBefore = await page.$eval(".inkEditor canvas", el => {
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rectBefore = await getRect(page, ".inkEditor canvas");
 
           for (let i = 0; i < 30; i++) {
             await kbUndo(page);
@@ -135,10 +126,7 @@ describe("Ink Editor", () => {
             await waitForStorageEntries(page, 1);
           }
 
-          const rectAfter = await page.$eval(".inkEditor canvas", el => {
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rectAfter = await getRect(page, ".inkEditor canvas");
 
           expect(Math.round(rectBefore.x))
             .withContext(`In ${browserName}`)
@@ -166,14 +154,9 @@ describe("Ink Editor", () => {
     it("must draw something", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorInk");
+          await switchToInk(page);
 
-          const rect = await page.$eval(".annotationEditorLayer", el => {
-            // With Chrome something is wrong when serializing a DomRect,
-            // hence we extract the values and just return them.
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rect = await getRect(page, ".annotationEditorLayer");
 
           const x = rect.x + 20;
           const y = rect.y + 20;
@@ -210,15 +193,9 @@ describe("Ink Editor", () => {
     it("must check that the editor layer is disabled", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorInk");
-          await page.waitForSelector(".annotationEditorLayer.inkEditing");
+          await switchToInk(page);
 
-          const rect = await page.$eval(".annotationEditorLayer", el => {
-            // With Chrome something is wrong when serializing a DomRect,
-            // hence we extract the values and just return them.
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rect = await getRect(page, ".annotationEditorLayer");
 
           const x = rect.x + 20;
           const y = rect.y + 20;
@@ -239,8 +216,7 @@ describe("Ink Editor", () => {
             );
           }
 
-          await page.click("#editorInk");
-          await page.waitForSelector(".annotationEditorLayer:not(.inkEditing)");
+          await switchToInk(page, /* disable */ true);
 
           const fourteenToOne = Array.from(new Array(13).keys(), n => 13 - n);
           for (const pageNumber of fourteenToOne) {
@@ -272,15 +248,9 @@ describe("Ink Editor", () => {
     it("must check that the ink editor is committed", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorInk");
-          await page.waitForSelector(".annotationEditorLayer.inkEditing");
+          await switchToInk(page);
 
-          const rect = await page.$eval(".annotationEditorLayer", el => {
-            // With Chrome something is wrong when serializing a DomRect,
-            // hence we extract the values and just return them.
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rect = await getRect(page, ".annotationEditorLayer");
 
           const x = rect.x + 20;
           const y = rect.y + 20;
@@ -312,13 +282,9 @@ describe("Ink Editor", () => {
     it("must check that a draw can be undone", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorInk");
-          await page.waitForSelector(".annotationEditorLayer.inkEditing");
+          await switchToInk(page);
 
-          const rect = await page.$eval(".annotationEditorLayer", el => {
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rect = await getRect(page, ".annotationEditorLayer");
 
           const xStart = rect.x + 300;
           const yStart = rect.y + 300;
@@ -359,13 +325,9 @@ describe("Ink Editor", () => {
     it("must check that a draw can be undone", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorInk");
-          await page.waitForSelector(".annotationEditorLayer.inkEditing");
+          await switchToInk(page);
 
-          const rect = await page.$eval(".annotationEditorLayer", el => {
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rect = await getRect(page, ".annotationEditorLayer");
 
           const xStart = rect.x + 300;
           const yStart = rect.y + 300;
@@ -419,13 +381,9 @@ describe("Ink Editor", () => {
     it("must check that a draw can be undone", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorInk");
-          await page.waitForSelector(".annotationEditorLayer.inkEditing");
+          await switchToInk(page);
 
-          const rect = await page.$eval(".annotationEditorLayer", el => {
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          const rect = await getRect(page, ".annotationEditorLayer");
 
           const xStart = rect.x + 300;
           const yStart = rect.y + 300;
@@ -474,13 +432,8 @@ describe("Ink Editor", () => {
     it("must check that we can draw several times on the same canvas", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorInk");
-          await page.waitForSelector(".annotationEditorLayer.inkEditing");
-
-          const rect = await page.$eval(".annotationEditorLayer", el => {
-            const { x, y } = el.getBoundingClientRect();
-            return { x, y };
-          });
+          await switchToInk(page);
+          const rect = await getRect(page, ".annotationEditorLayer");
 
           let xStart = rect.x + 10;
           const yStart = rect.y + 10;
