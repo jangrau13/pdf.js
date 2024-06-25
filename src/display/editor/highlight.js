@@ -25,6 +25,25 @@ import { AnnotationEditor } from "./editor.js";
 import { ColorPicker } from "./color_picker.js";
 import { noContextMenu } from "../display_utils.js";
 
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+  template: '[%t] %l (%n):',
+  levelFormatter(level) {
+    return level.toUpperCase();
+  },
+  nameFormatter(name) {
+    return name || 'highlight.js';
+  },
+  timestampFormatter(date) {
+    return date.toISOString();
+  },
+});
+
 /**
  * Basic draw editor in order to generate an Highlight annotation.
  */
@@ -111,6 +130,8 @@ class HighlightEditor extends AnnotationEditor {
     this.#text = params.text || "";
     this._isDraggable = false;
 
+    // get input Modal, read it and remove it
+    log.info('get input from modal')
     const storedInput = document.getElementById('rdfa-tmp-storage').getAttribute('data-user-input')
     if (storedInput) {
       this.#rdfa_content = storedInput;
@@ -384,6 +405,7 @@ class HighlightEditor extends AnnotationEditor {
     }
     if (this._uiManager.highlightColors) {
       this.#colorPicker = new ColorPicker({ editor: this });
+      log.info('here we could add more picker icons')
       //toolbar.addColorPicker(this.#colorPicker);
       //toolbar.addJanEditorTool();
     }
@@ -574,6 +596,7 @@ class HighlightEditor extends AnnotationEditor {
       div.setAttribute("aria-label", this.#text);
       div.setAttribute("role", "mark");
     }
+    log.info('testing for rdfa content', this.#rdfa_content)
     if (this.#rdfa_content) {
       const innerRdfa = document.createElement("div");
       innerRdfa.setAttribute("id", "rdfa-"+ this.#id)

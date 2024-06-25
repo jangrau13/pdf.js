@@ -42,9 +42,28 @@ import { incrementalUpdate } from "./writer.js";
 import { MessageHandler } from "../shared/message_handler.js";
 import { PDFWorkerStream } from "./worker_stream.js";
 import { StructTreeRoot } from "./struct_tree.js";
+import log from "loglevel";
+import prefix from "loglevel-plugin-prefix";
 
 class WorkerTask {
   constructor(name) {
+    log.setLevel("INFO", true)
+    log.noConflict()
+    prefix.reg(log);
+
+
+    prefix.apply(log, {
+      template: '[%t] %l (%n):',
+      levelFormatter(level) {
+        return level.toUpperCase();
+      },
+      nameFormatter(name) {
+        return name || 'worker.js';
+      },
+      timestampFormatter(date) {
+        return date.toISOString();
+      },
+    });
     this.name = name;
     this.terminated = false;
     this._capability = Promise.withResolvers();
@@ -542,6 +561,7 @@ class WorkerMessageHandler {
         filename,
         jan_document = "reading something, you should not",
       }) {
+        log.info('received SaveDocument with the following jan_document', jan_document)
         const globalPromises = [
           pdfManager.requestLoadedStream(),
           pdfManager.ensureCatalog("acroForm"),
@@ -600,6 +620,7 @@ class WorkerMessageHandler {
             newAnnotationPromises.push(
               pdfManager.getPage(pageIndex).then(page => {
                 const task = new WorkerTask(`Save (editor): page ${pageIndex}`);
+                log.info('saving with new jan document', jan_document)
                 return page
                   .saveNewAnnotations(
                     handler,

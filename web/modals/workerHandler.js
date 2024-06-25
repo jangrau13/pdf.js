@@ -1,4 +1,24 @@
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+    template: '[%t] %l (%n):',
+    levelFormatter(level) {
+        return level.toUpperCase();
+    },
+    nameFormatter(name) {
+        return name || 'workerHandler.js';
+    },
+    timestampFormatter(date) {
+        return date.toISOString();
+    },
+});
+
 export async function handleConceptButtons(data) {
+    log.info('handleConceptButtons')
     const buttonContainer = document.querySelector('.button-container.pdf_utils');
     if (buttonContainer) {
         // Create a temporary container to parse the button HTML string
@@ -13,8 +33,8 @@ export async function handleConceptButtons(data) {
 
 
 export async function handleUpdatePDFAfterKGAdd(data, document) {
+    log.info('handleUpdatePDFAfterKGAdd')
     const potentialSaveCandidates = document.querySelectorAll('[data-wiser-potential-subject]')
-    console.log("found those potential candidates after PDF Update", potentialSaveCandidates);
 
     const updatedList = data.updatedElements
 
@@ -24,7 +44,6 @@ export async function handleUpdatePDFAfterKGAdd(data, document) {
         if (updatedList.includes(subject)) {
             // only update the ones which were really updated
             changeCandidate.removeAttribute("data-wiser-potential-subject")
-            console.log("setting wiser-Resource", subject)
             changeCandidate.setAttribute('data-wiser-subject', subject)
         }
     }

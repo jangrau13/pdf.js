@@ -26,6 +26,24 @@ import { FeatureTest, shadow, unreachable } from "../../shared/util.js";
 import { AltText } from "./alt_text.js";
 import { EditorToolbar } from "./toolbar.js";
 import { noContextMenu } from "../display_utils.js";
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+  template: '[%t] %l (%n):',
+  levelFormatter(level) {
+    return level.toUpperCase();
+  },
+  nameFormatter(name) {
+    return name || 'editor.js';
+  },
+  timestampFormatter(date) {
+    return date.toISOString();
+  },
+});
 
 /**
  * @typedef {Object} AnnotationEditorParameters
@@ -414,7 +432,6 @@ class AnnotationEditor {
   }
 
   addToAnnotationStorage() {
-    // here I need to add the information to the annotation I want to
     this._uiManager.addToAnnotationStorage(this);
   }
 

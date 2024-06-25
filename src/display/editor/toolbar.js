@@ -17,6 +17,25 @@ import { noContextMenu } from "../display_utils.js";
 import {RDFaBuilder} from "../../../web/rdfa/RDFaBuilder.js";
 import {RDFaElement} from "../../../web/rdfa/RDFaElement.js";
 
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+    template: '[%t] %l (%n):',
+    levelFormatter(level) {
+        return level.toUpperCase();
+    },
+    nameFormatter(name) {
+        return name || 'toolbar.js';
+    },
+    timestampFormatter(date) {
+        return date.toISOString();
+    },
+});
+
 class EditorToolbar {
   #toolbar = null;
 
@@ -141,6 +160,7 @@ class EditorToolbar {
   }
 
     addJanEditorTool() {
+      log.info('create your own toolbar-element here')
         // I am in the right toolbar, but only for editing
         const button = document.createElement("button");
         button.className = "janTester";
@@ -263,6 +283,7 @@ class HighlightToolbar {
     const signal = this.#uiManager._signal;
     button.addEventListener("contextmenu", noContextMenu, { signal });
     const myHide = () => this.hide()
+      console.log('change the highlight button to WISER')
     button.addEventListener(
       "click",
       async () => {
@@ -290,6 +311,7 @@ function getLastPartOfUrl(url) {
 
 async function setupModal(selectedRange, selection, uiManager, myHide) {
     // lame, but like this I don't have to do round-trips
+    log.info('setup modal')
     let currentMessage = null;
     const selectedText = selection.toString();
     let infoToLookFor = []
@@ -297,6 +319,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
     let potentialSubject = null
     return {
         async render(myWorker) {
+            log.info('render modal')
             const magicWord = 'magic_onSave_' + new Date().toISOString();
             const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
             const renderURL = current_concept
@@ -342,6 +365,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
 
         //TODO: set the information on the save option in the AtomicWorker as well and use it here
         async onSave(myWorker) {
+            log.info('saving modal content')
             const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
             const rdfaBuilder = new RDFaBuilder();
             const container = new RDFaElement('div')
@@ -383,7 +407,12 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
                     }
                 }
             }
-            let page = document.getElementById("pageNumber").value
+
+            // this takes it from the PDF document, which might not align with the actual document
+            // if it is aligned
+            let viewer = document.getElementById("viewer")
+            let viewerPager = viewer.getElementsByClassName("page").item(0)
+            let page = viewerPager.getAttribute("data-page-number")
             // always set pdf id and page
             let pdf_name = getLastPartOfUrl(window.location.href)
 
@@ -417,6 +446,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
                 if (selection.rangeCount > 0) selection.removeAllRanges();
                 selection.addRange(selectedRange);
             }
+            log.info('actually highlighting the text is done here')
             // Execute the highlight action if needed
             uiManager.highlightSelection("floating_button");
 
@@ -433,6 +463,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
          * Handles the close operation.
          */
         onClose() {
+            log.info('modal is closed')
             uiManager._eventBus.dispatch("switchannotationeditormode",
                 {
                     source: this,

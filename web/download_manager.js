@@ -16,6 +16,24 @@
 /** @typedef {import("./interfaces").IDownloadManager} IDownloadManager */
 
 import { createValidAbsoluteUrl, isPdfFile } from "pdfjs-lib";
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+    template: '[%t] %l (%n):',
+    levelFormatter(level) {
+        return level.toUpperCase();
+    },
+    nameFormatter(name) {
+        return name || 'download_manager.js';
+    },
+    timestampFormatter(date) {
+        return date.toISOString();
+    },
+});
 
 if (typeof PDFJSDev !== "undefined" && !PDFJSDev.test("CHROME || GENERIC")) {
   throw new Error(
@@ -44,14 +62,11 @@ function download(blobUrl, filename) {
 }
 
 function saveToServer(blob, filename, savingDone) {
+    log.info('saveToServer', 'saving it to Atomic')
     let method = 'POST'
     if(savingDone){
         method = 'PUT'
     }
-
-    // Implement your server-side save logic here
-    console.log(`Saving ${filename} to server...`);
-
     // Create a FormData object to send the blob
     const formData = new FormData();
     formData.append('file', blob, filename);
@@ -61,7 +76,7 @@ function saveToServer(blob, filename, savingDone) {
         body: formData
     }).then(response => {
         if (response.ok) {
-            console.log(`File ${filename} saved successfully.`);
+            log.info('download_manager.js', 'saveToServer', 'saving was successful', filename)
         } else {
             console.error('Failed to save the file.');
         }
@@ -133,19 +148,18 @@ class DownloadManager {
   }
 
   download(data, url, filename, _options) {
+      log.info('special download version for WISER')
     const saveKGButton = document.getElementById("saveKnowledge")
     let savingDone = saveKGButton.getAttribute("saving-done")
     let choice = false
     let finalFilename = filename
     // if saving-done is true, we don't have to ask, we go directly to update
     if(!savingDone){
-      console.log("this is a normal save")
       const finalFilename = prompt("Please enter the filename:", filename);
       // Ask user whether they want to save it to the server or download the PDF
       choice = confirm("Do you want to save it to the server? Click 'OK' to save to server, 'Cancel' to download the PDF.");
     }
     if (choice || savingDone) {
-      console.log("saving it with savingDone", savingDone)
       // User chose to save it to the server
       saveToServer(new Blob([data], { type: "application/pdf" }), finalFilename, savingDone);
       // allow the saving of knowledge now

@@ -45,6 +45,25 @@ import { AnnotationStorage } from "./annotation_storage.js";
 import { ColorConverters } from "../shared/scripting_utils.js";
 import { XfaLayer } from "./xfa_layer.js";
 
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+  template: '[%t] %l (%n):',
+  levelFormatter(level) {
+    return level.toUpperCase();
+  },
+  nameFormatter(name) {
+    return name || 'annotation_layer.js';
+  },
+  timestampFormatter(date) {
+    return date.toISOString();
+  },
+});
+
 const DEFAULT_TAB_INDEX = 1000;
 const DEFAULT_FONT_SIZE = 9;
 const GetElementsByNameSet = new WeakSet();
@@ -622,7 +641,7 @@ class AnnotationElement {
         let magicWord;
     const { container, data } = this;
     container.setAttribute("aria-haspopup", "dialog");
-
+    log.info('adding rdfa to HTML document')
       const newDiv = document.createElement("div");
       newDiv.innerHTML = data.contentsObj.str
       const popupDiv = document.getElementById("popus")
@@ -644,6 +663,7 @@ class AnnotationElement {
               magic: magicWord,
               url: resource
           });
+          log.info('creating linkHeaderHTML')
           const linkHeaderHTML = document.createElement("div")
           linkHeaderHTML.id = magicWord
           const linkHeaderSpan = document.createElement("a")
@@ -682,6 +702,7 @@ class AnnotationElement {
     }));
     //TODO: why is this rendering this bad?
     wiserEventBus.on(magicWord, (msg) => {
+      log.info('waiting to show content popup', magicWord)
       const startTime = Date.now();
       let linkHeaderDiv;
       // at best very hacky :)
@@ -2969,6 +2990,7 @@ class HighlightAnnotationElement extends AnnotationElement {
     }
 
     this.container.classList.add("highlightAnnotation");
+    log.info('defining color of annotation')
     let color = this.data.color;
     let hexColor = Util.makeHexColor(color[0], color[1], color[2]);
     let rgbaColor = this.hexToRgba(hexColor, 0.25);

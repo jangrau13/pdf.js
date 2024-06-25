@@ -64,6 +64,24 @@ import { StructTreePage } from "./struct_tree.js";
 import { writeObject } from "./writer.js";
 import { XFAFactory } from "./xfa/factory.js";
 import { XRef } from "./xref.js";
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+  template: '[%t] %l (%n):',
+  levelFormatter(level) {
+    return level.toUpperCase();
+  },
+  nameFormatter(name) {
+    return name || 'document.js';
+  },
+  timestampFormatter(date) {
+    return date.toISOString();
+  },
+});
 
 const DEFAULT_USER_UNIT = 1.0;
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
@@ -292,6 +310,7 @@ class Page {
     imagePromises,
     jan_second_add_on = false
   ) {
+    log.info('added new jan second add-on', jan_second_add_on)
     if (this.xfaFactory) {
       throw new Error("XFA: Cannot save new annotations.");
     }
@@ -317,6 +336,7 @@ class Page {
       a => !(a instanceof Ref && deletedAnnotations.has(a))
     );
 
+    log.info('saving new Annotation')
     const newData = await AnnotationFactory.saveNewAnnotations(
       partialEvaluator,
       task,

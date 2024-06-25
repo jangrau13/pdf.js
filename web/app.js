@@ -85,6 +85,8 @@ import { Preferences } from "web-preferences";
 import { SecondaryToolbar } from "web-secondary_toolbar";
 import { Toolbar } from "web-toolbar";
 import { ViewHistory } from "./view_history.js";
+import log from 'loglevel';
+import prefix from 'loglevel-plugin-prefix'
 
 const FORCE_PAGES_LOADED_TIMEOUT = 10000; // ms
 const WHEEL_ZOOM_DISABLED_TIMEOUT = 1000; // ms
@@ -392,6 +394,28 @@ const PDFViewerApplication = {
       : new EventBus();
     this.eventBus = eventBus;
 
+    //added by Jan
+    log.setLevel("INFO", true)
+    log.noConflict()
+    prefix.reg(log);
+
+    prefix.apply(log, {
+      template: '[%t] %l (%n):',
+      levelFormatter(level) {
+        return level.toUpperCase();
+      },
+      nameFormatter(name) {
+        if(!name) {
+          if (document && document.currentScript) {
+            name = document.currentScript.src
+          }
+        }
+        return name || 'app.js';
+      },
+      timestampFormatter(date) {
+        return date.toISOString();
+      },
+    });
     this.overlayManager = new OverlayManager();
 
     const pdfRenderingQueue = new PDFRenderingQueue();

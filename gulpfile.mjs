@@ -560,6 +560,7 @@ function createAtomicWorkerBundle(defines) {
         .pipe(tweakWebpackOutput("atomicWorker"))
 }
 
+
 function createWebBundle(defines, options) {
   const viewerFileConfig = createWebpackConfig(
     defines,

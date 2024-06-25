@@ -72,6 +72,8 @@ import { PDFNetworkStream } from "display-network";
 import { PDFNodeStream } from "display-node_stream";
 import { TextLayer } from "./text_layer.js";
 import { XfaText } from "./xfa_text.js";
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
 
 const DEFAULT_RANGE_CHUNK_SIZE = 65536; // 2^16 = 65536
 const RENDERING_CANCELLED_TIMEOUT = 100; // ms
@@ -93,6 +95,22 @@ const DefaultStandardFontDataFactory =
   typeof PDFJSDev !== "undefined" && PDFJSDev.test("GENERIC") && isNodeJS
     ? NodeStandardFontDataFactory
     : DOMStandardFontDataFactory;
+
+prefix.reg(log);
+
+
+prefix.apply(log, {
+  template: '[%t] %l (%n):',
+  levelFormatter(level) {
+    return level.toUpperCase();
+  },
+  nameFormatter(name) {
+    return name || 'api.js';
+  },
+  timestampFormatter(date) {
+    return date.toISOString();
+  },
+});
 
 /**
  * @typedef { Int8Array | Uint8Array | Uint8ClampedArray |
@@ -2885,10 +2903,13 @@ class WorkerTransport {
           "please use the getData-method instead."
       );
     }
+
+    log.info('api.js', 'saveDocument', 'serializing DOM in order to get Information from it')
     const marks = wiserSerializeHTMLElement(
       document.getElementById("viewerContainer")
     );
     const { map, transfer } = this.annotationStorage.serializable;
+    log.info('api.js', 'saveDocument', 'send with Promise SaveDocument including jan_document (as DOM)')
     return this.messageHandler
       .sendWithPromise(
         "SaveDocument",
@@ -3192,6 +3213,7 @@ class PDFObjects {
 }
 
 function wiserSerializeHTMLElement(element, helper) {
+  log.info('api.js', 'wiserSerializeHTMLElement', 'serializing marks')
   const serializedElements = [];
 
   // Get the scale factor from the element with the id "viewer"
@@ -3202,6 +3224,7 @@ function wiserSerializeHTMLElement(element, helper) {
 
   // Serialize any element with its children
   function serializeElementWithChildren(element) {
+    log.debug('api.js', 'serializeElementWithChildren')
     const elementObj = {
       tagName: element.tagName,
       attributes: {},
@@ -3224,6 +3247,7 @@ function wiserSerializeHTMLElement(element, helper) {
   }
 
   function extractBaseInfo(expression) {
+    log.info('api.js', 'extractBaseInfo')
     const regex = /(\d+\.?\d*)px/;
     const matches = expression.match(regex);
     return matches ? parseFloat(matches[1]) : null;
@@ -3231,6 +3255,7 @@ function wiserSerializeHTMLElement(element, helper) {
 
   // Find the closest parent with the class "page" and return its height
   function analyzePageOfMark(element) {
+    log.info('api.js','analyzePageOfMark')
     let parent = element.parentElement;
     while (parent && !parent.classList.contains("page")) {
       parent = parent.parentElement;
@@ -3238,6 +3263,12 @@ function wiserSerializeHTMLElement(element, helper) {
     const myHeight = parent.style.getPropertyValue("height");
     const myWidth = parent.style.getPropertyValue("width");
     const pageNumber = parseInt(parent.dataset.pageNumber);
+    const pageNumberDiv = document.createElement("div")
+    if(pageNumberDiv){
+      pageNumberDiv.setAttribute("id", "page-number-actual")
+      pageNumberDiv.setAttribute("data-page-number-actual", pageNumber);
+      document.body.appendChild(pageNumberDiv)
+    }
     if (pageNumber === undefined) {
       console.error("Page number not found");
     }
@@ -3253,6 +3284,7 @@ function wiserSerializeHTMLElement(element, helper) {
 
   // Find all mark elements and serialize their grandparent if it's 'div'
   function findAndSerializeMarks(element) {
+    log.debug('api.js','findAndSerializeMarks')
     if (element.attributes.role && element.attributes.role.value === "mark") {
       // Check if the parent is 'div'
       if (
@@ -3278,6 +3310,7 @@ function wiserSerializeHTMLElement(element, helper) {
   }
 
   function calculateElementPositionAndSize(element) {
+    log.info('api.js', 'calculateElementPositionAndSize')
     // Extract style attributes
     const actualHeight = element.actualHeight;
     const actualWidth = element.actualWidth;

@@ -69,6 +69,24 @@ import { ObjectLoader } from "./object_loader.js";
 import { OperatorList } from "./operator_list.js";
 import { writeObject } from "./writer.js";
 import { XFAFactory } from "./xfa/factory.js";
+import log from 'loglevel'
+import prefix from "loglevel-plugin-prefix";
+
+log.noConflict()
+prefix.reg(log);
+
+prefix.apply(log, {
+  template: '[%t] %l (%n):',
+  levelFormatter(level) {
+    return level.toUpperCase();
+  },
+  nameFormatter(name) {
+    return name || 'annotation.js';
+  },
+  timestampFormatter(date) {
+    return date.toISOString();
+  },
+});
 
 class AnnotationFactory {
   static createGlobals(pdfManager) {
@@ -4610,7 +4628,7 @@ class InkAnnotation extends MarkupAnnotation {
 class HighlightAnnotation extends MarkupAnnotation {
   constructor(params) {
     super(params);
-
+    log.info('creation', 'create a new Highlight-Annotation', params)
     const { dict, xref } = params;
     this.data.annotationType = AnnotationType.HIGHLIGHT;
 
@@ -4653,7 +4671,6 @@ class HighlightAnnotation extends MarkupAnnotation {
   }
 
   static createNewDict(annotation, xref, { apRef, ap, marks_on_page }) {
-    let wiserOpacity = 0.5
     let rdfa
     const { color, opacity, rect, rotation, user, quadPoints } = annotation;
     const highlight = new Dict(xref);
@@ -4664,28 +4681,37 @@ class HighlightAnnotation extends MarkupAnnotation {
     highlight.set("F", 4);
     highlight.set("Border", [0, 0, 0]);
     highlight.set("Rotate", rotation);
-    highlight.set("QuadPoints", quadPoints);
-        // Read from the hidden element
+    // those quadpoints seem to be wrong
+    //highlight.set("QuadPoints", quadPoints);
+    let newQuadPoints = []
+    newQuadPoints[0] = rect[0]
+    newQuadPoints[1] = rect[1]
+    newQuadPoints[2] = rect[2]
+    newQuadPoints[3] = rect[1]
+    newQuadPoints[4] = rect[0]
+    newQuadPoints[5] = rect[3]
+    newQuadPoints[6] = rect[2]
+    newQuadPoints[7] = rect[3]
+    highlight.set("QuadPoints", newQuadPoints)
+    // Read from the hidden element
     let closestMark = null;
     if (marks_on_page) {
         closestMark = wiserFindClosestMark(marks_on_page, annotation);
     }
 
-    console.log("did I find the mark?", closestMark, marks_on_page)
-
     if (closestMark) {
-        rdfa = closestMark.children.filter(child => {
-            const attributes = child.attributes
-            return attributes["class"] === "rdfa-content"
-        })[0]
-        const htmlString = createHTMLStringFromObject(rdfa)
-        console.log("HTML string", htmlString)
-        if (htmlString) {
-            highlight.set(
-                "Contents",
-                htmlString
-            );
-        }
+      rdfa = closestMark.children.filter(child => {
+        const attributes = child.attributes
+        return attributes["class"] === "rdfa-content"
+      })[0]
+      const htmlString = createHTMLStringFromObject(rdfa)
+      log.info('setting rdfa-content', htmlString)
+      if (htmlString) {
+          highlight.set(
+              "Contents",
+              htmlString
+          );
+      }
     }
 
     // Color.
