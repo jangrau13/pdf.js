@@ -305,7 +305,7 @@ function createWebpackConfig(
     !bundleDefines.TESTING &&
     !disableSourceMaps;
   const isModule = output.library?.type === "module";
-  const isMinified = bundleDefines.MINIFIED;
+  const isMinified = false//bundleDefines.MINIFIED;
   const skipBabel = bundleDefines.SKIP_BABEL;
 
   const babelExcludeRegExp = [
@@ -352,6 +352,7 @@ function createWebpackConfig(
             new TerserPlugin({
               extractComments: false,
               parallel: false,
+              minify: false,
               terserOptions: {
                 compress: {
                   // V8 chokes on very long sequences, work around that.

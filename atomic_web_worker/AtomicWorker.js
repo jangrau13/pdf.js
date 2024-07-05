@@ -71,7 +71,8 @@ function delay(time) {
 
 async function handleRetrieveConcepts() {
     log.info('AtomicWorker', 'handleRetrieveConcepts');
-    await delay(500);
+    await delay(1000);
+
     const concepts = await store.getResourceAsync(myAgent.subject);
     const classes = concepts.get("https://wiser-sp4.interactions.ics.unisg.ch/property/knows-concepts");
 
@@ -328,7 +329,7 @@ async function handleDropDown(myVisual, container, selectedText, infoToLookFor) 
     // Generate options and store option values
     for (const key of myClasses) {
         //console.log('dropdown heading for key', key)
-        if(key){
+        if (key) {
             const snResource = await store.getResourceAsync(key);
             let optionValue = snResource.get("https://atomicdata.dev/properties/shortname");
             let comment = snResource.get("https://wiser-sp4.interactions.ics.unisg.ch/property/wiser-comment");
@@ -446,7 +447,7 @@ async function createModal(url, magic, selectedText = '') {
             default:
                 break;
         }
-        if(laScript){
+        if (laScript) {
             laFinalScript += laScript;
             laScript = null;
         }
@@ -599,7 +600,7 @@ async function init() {
     await store.setServerUrl(serverURL);
 
     // Fetch key and URL from the endpoint
-    const response = await fetch('/v1/api/get_my_agent');
+    const response = await fetch('http://localhost:8000/v1/api/get_my_agent');
     if (!response.ok) {
         throw new Error(`Failed to fetch agent details: ${response.statusText}`);
     }
@@ -609,6 +610,8 @@ async function init() {
         agentData.key,
         agentData.url
     );
+
+    log.info('initializing agent', myAgent)
 
     await store.setAgent(myAgent);
     console.log("Atomic Worker: Store initialized successfully");
