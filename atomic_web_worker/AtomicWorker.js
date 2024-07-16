@@ -600,6 +600,7 @@ async function init() {
     await store.setServerUrl(serverURL);
 
     // Fetch key and URL from the endpoint
+    /*
     const response = await fetch('http://localhost:8000/v1/api/get_my_agent');
     if (!response.ok) {
         throw new Error(`Failed to fetch agent details: ${response.statusText}`);
@@ -610,10 +611,15 @@ async function init() {
         agentData.key,
         agentData.url
     );
+    */
+
+    myAgent = new Agent(
+        
+    )
 
     log.info('initializing agent', myAgent)
 
-    await store.setAgent(myAgent);
+    //await store.setAgent(myAgent);
     console.log("Atomic Worker: Store initialized successfully");
 }
 
