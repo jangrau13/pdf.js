@@ -240,8 +240,7 @@ if (
 ) {
 
     //add by Jan
-    log.info('setting up atomic worker and wiser Eventbus')
-    window.myAtomicWorker = new Worker("/v1/api/pdf_api/js/atomic.worker.js")
+    log.info('setting up wiser Eventbus')
     window.WiserEventBus = WiserEventBus
 
     /*
@@ -277,10 +276,13 @@ class Modal {
             WiserEventBus.on('downloadKnowledge', () => {
                 // Extract the HTML content as a string
                 const documentHTML = document.documentElement.outerHTML;
+                /*
+                atomic replace extract knowledge from PDF
                 window.myAtomicWorker.postMessage({
                     type: 'addKnowledge',
                     document: documentHTML
                 });
+                    */
             });
 
             window.wiserEventBus = WiserEventBus
@@ -288,6 +290,8 @@ class Modal {
     }
 
     async initStore() {
+        /*
+        TODO: can probably be ignored
         log.info('init Atomic Store')
         window.myAtomicWorker.onmessage = async (e) => {
             switch (e.data.type) {
@@ -327,6 +331,7 @@ class Modal {
 
 
         window.myAtomicWorker = myAtomicWorker
+        */
     }
 
     /**
@@ -345,7 +350,8 @@ class Modal {
         modalOverlay.appendChild(modalContent);
 
         const content = document.createElement('div');
-        content.innerHTML = await modal.render(window.myAtomicWorker);
+        // TODO: atomicworker replace with a render function (hopefully react)
+        //content.innerHTML = await modal.render(window.myAtomicWorker);
         modalContent.appendChild(content);
 
         const footer = document.createElement('div');
@@ -353,10 +359,13 @@ class Modal {
 
         const saveButton = document.createElement('button');
         saveButton.textContent = 'Save';
+        /*
+        TODO atomicworker: save to store
         saveButton.addEventListener('click', async () => {
             await modal.onSave(window.myAtomicWorker);
             this.clearModal();
         });
+        */
 
         const closeButton = document.createElement('button');
         closeButton.textContent = 'Close';

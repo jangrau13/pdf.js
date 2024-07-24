@@ -365,6 +365,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
 
         //TODO: set the information on the save option in the AtomicWorker as well and use it here
         async onSave(myWorker) {
+          //TODO: save it to the store
             log.info('saving modal content')
             const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
             const rdfaBuilder = new RDFaBuilder();

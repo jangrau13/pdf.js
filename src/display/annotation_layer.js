@@ -658,11 +658,7 @@ class AnnotationElement {
           const resource = typeOfElement.getAttribute("data-wiser-subject")
           // check whether the annotation is still in the store
           magicWord = "magic_word_" + new Date().toISOString()
-          window.myAtomicWorker.postMessage({
-              type: 'ping',
-              magic: magicWord,
-              url: resource
-          });
+          //atomicworker replace: check for existence of the annotation in the store 
           log.info('creating linkHeaderHTML')
           const linkHeaderHTML = document.createElement("div")
           linkHeaderHTML.id = magicWord

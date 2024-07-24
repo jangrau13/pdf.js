@@ -405,7 +405,7 @@ const PDFViewerApplication = {
         return level.toUpperCase();
       },
       nameFormatter(name) {
-        if(!name) {
+        if (!name) {
           if (document && document.currentScript) {
             name = document.currentScript.src
           }
@@ -454,19 +454,19 @@ const PDFViewerApplication = {
     const annotationEditorMode = AppOptions.get("annotationEditorMode");
     const pageColors =
       AppOptions.get("forcePageColors") ||
-      window.matchMedia("(forced-colors: active)").matches
+        window.matchMedia("(forced-colors: active)").matches
         ? {
-            background: AppOptions.get("pageColorsBackground"),
-            foreground: AppOptions.get("pageColorsForeground"),
-          }
+          background: AppOptions.get("pageColorsBackground"),
+          foreground: AppOptions.get("pageColorsForeground"),
+        }
         : null;
     const altTextManager = appConfig.altTextDialog
       ? new AltTextManager(
-          appConfig.altTextDialog,
-          container,
-          this.overlayManager,
-          eventBus
-        )
+        appConfig.altTextDialog,
+        container,
+        this.overlayManager,
+        eventBus
+      )
       : null;
 
     const enableHWA = AppOptions.get("enableHWA");
@@ -559,7 +559,7 @@ const PDFViewerApplication = {
         this.overlayManager,
         eventBus,
         l10n,
-        /* fileNameLookup = */ () => this._docFilename
+        /* fileNameLookup = */() => this._docFilename
       );
     }
 
@@ -675,8 +675,13 @@ const PDFViewerApplication = {
       const queryString = document.location.search.substring(1);
       const params = parseQueryString(queryString);
       const pdfID = document.getElementById("pdf_id").dataset.id;
+      //http://localhost:9883/download/files/1721821490465-QR-Rechnung_Straussenei_2024.pdf
       //file = params.get("file") ?? AppOptions.get("defaultUrl");
-      if(pdfID.length > 1){
+      if (pdfID.match("http")) {
+        file = pdfID
+        validateFileURL(file);
+      }
+      else if (pdfID.length > 1) {
         file = "/v1/api/pdf_files/pdf/" + pdfID + ".pdf"
         validateFileURL(file);
       }
@@ -920,7 +925,7 @@ const PDFViewerApplication = {
       this._hasAnnotationEditors && !this.pdfRenderingQueue.printing;
     // edit by Jan
     const subTitleComponent = document.getElementById("myPDFTitle")
-    if(subTitleComponent){
+    if (subTitleComponent) {
       subTitleComponent.textContent = `${editorIndicator ? "* " : ""}${title}`
     }
     //document.title = `${editorIndicator ? "* " : ""}${title}`;
@@ -1133,7 +1138,7 @@ const PDFViewerApplication = {
     } catch {
       // When the PDF document isn't ready, or the PDF file is still
       // downloading, simply download using the URL.
-        //TODO: WISER: adjust for our usecase
+      //TODO: WISER: adjust for our usecase
     }
     this.downloadManager.download(
       data,
@@ -1596,8 +1601,8 @@ const PDFViewerApplication = {
     // Provides some basic debug information
     console.log(
       `PDF ${pdfDocument.fingerprints[0]} [${info.PDFFormatVersion} ` +
-        `${(info.Producer || "-").trim()} / ${(info.Creator || "-").trim()}] ` +
-        `(PDF.js: ${version || "?"} [${build || "?"}])`
+      `${(info.Producer || "-").trim()} / ${(info.Creator || "-").trim()}] ` +
+      `(PDF.js: ${version || "?"} [${build || "?"}])`
     );
     let pdfTitle = info.Title;
 
@@ -2204,7 +2209,7 @@ const PDFViewerApplication = {
     document.blockUnblockOnload?.(false);
 
     // Ensure that this method is only ever run once.
-    this._unblockDocumentLoadEvent = () => {};
+    this._unblockDocumentLoadEvent = () => { };
   },
 
   /**

@@ -53,6 +53,7 @@ class Toolbar {
    */
   constructor(options, eventBus) {
     this.#opts = options;
+    console.log('creating opts', options);
     this.eventBus = eventBus;
     const buttons = [
       { element: options.previous, eventName: "previouspage" },
