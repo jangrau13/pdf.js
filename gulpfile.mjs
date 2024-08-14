@@ -554,13 +554,6 @@ function createWorkerBundle(defines) {
     .pipe(tweakWebpackOutput("pdfjsWorker"));
 }
 
-function createAtomicWorkerBundle(defines) {
-    return gulp
-        .src("./atomic_web_worker/AtomicWorker.js", { encoding: false })
-        .pipe(webpackStream())
-        .pipe(tweakWebpackOutput("atomicWorker"))
-}
-
 
 function createWebBundle(defines, options) {
   const viewerFileConfig = createWebpackConfig(
@@ -1036,7 +1029,6 @@ function buildGeneric(defines, dir) {
   return ordered([
     createMainBundle(defines).pipe(gulp.dest(dir + "build")),
     createWorkerBundle(defines).pipe(gulp.dest(dir + "build")),
-        createAtomicWorkerBundle(defines).pipe(gulp.dest(dir + "build")),
     createSandboxBundle(defines).pipe(gulp.dest(dir + "build")),
     createWebBundle(defines, {
       defaultPreferencesDir: defines.SKIP_BABEL
@@ -1082,32 +1074,9 @@ async function copyHTML() {
 }
 
 async function copyBuildJS(done) {
-    // Step 1: Rename main.js to atomic.worker.js and save it in the same directory
-    await new Promise((resolve, reject) => {
-        gulp.src('build/generic/build/main.js')
-            .pipe(rename('atomic.worker.js'))
-            .pipe(gulp.dest('build/generic/build'))
-            .on('end', resolve)
-            .on('error', reject);
-    });
-    await new Promise((resolve, reject) => {
-        gulp.src('build/generic/build/main.js.LICENSE.txt')
-            .pipe(rename('atomic.worker.js.LICENSE.txt'))
-            .pipe(gulp.dest('build/generic/build'))
-            .on('end', resolve)
-            .on('error', reject);
-    });
-
-    // Step 2: Delete the original main.js file using rimraf
-    await new Promise((resolve, reject) => {
-        rimraf('build/generic/build/main.js', (err) => {
-            if (err) reject(err);
-            else resolve();
-        });
-    });
 
     // Step 3: Copy all necessary files to the destination
-    return gulp.src(['build/generic/build/pdf.mjs', 'build/generic/build/pdf.worker.mjs', 'build/generic/build/pdf.sandbox.mjs', 'build/generic/build/atomic.worker.js'])
+    return gulp.src(['build/generic/build/pdf.mjs', 'build/generic/build/pdf.worker.mjs', 'build/generic/build/pdf.sandbox.mjs'])
         .pipe(gulp.dest('../pdf_api/js'));
 }
 

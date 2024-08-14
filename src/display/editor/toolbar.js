@@ -283,19 +283,31 @@ class HighlightToolbar {
     const signal = this.#uiManager._signal;
     button.addEventListener("contextmenu", noContextMenu, { signal });
     const myHide = () => this.hide()
-      console.log('change the highlight button to WISER')
+    console.log('change the highlight button to WISER')
+
     button.addEventListener(
       "click",
       async () => {
         const selection = window.getSelection();
         const selectedRange = selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
         const uiManager = this.#uiManager
-
-        const myFreshModal = await setupModal(selectedRange, selection, uiManager, myHide);
-window.wiserEventBus.emit('showModal', myFreshModal);
+        //change for atomic
+        //const myFreshModal = await setupModal(selectedRange, selection, uiManager, myHide);
+        //window.wiserEventBus.emit('showModal', myFreshModal);
+        document.dispatchEvent(new CustomEvent('wiserShowModal', {detail: {selectedRange, selection, uiManager, myHide}}));
+        //after we release the work to react, we can hide the highlight button
+        uiManager._eventBus.dispatch("switchannotationeditormode",
+          {
+              source: this,
+              mode: 0,
+          });
+        myHide();
+        //window.getSelection().removeAllRanges();
       },
       { signal }
     );
+
+
     this.#buttons.append(button);
   }
 
@@ -365,7 +377,9 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
 
         //TODO: set the information on the save option in the AtomicWorker as well and use it here
         async onSave(myWorker) {
-            log.info('saving modal content')
+          //TODO: save it to the store
+          log.info('modal onSave is still being called somehow')
+          /*
             const current_concept = document.getElementById("current-concept-holder").getAttribute("data-current-concept")
             const rdfaBuilder = new RDFaBuilder();
             const container = new RDFaElement('div')
@@ -456,6 +470,7 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
                     source: this,
                     mode: 0,
                 });
+                */
 
         },
 
@@ -463,13 +478,15 @@ async function setupModal(selectedRange, selection, uiManager, myHide) {
          * Handles the close operation.
          */
         onClose() {
-            log.info('modal is closed')
+          log.info('modal onClose is still being called somehow') 
+          /*
             uiManager._eventBus.dispatch("switchannotationeditormode",
                 {
                     source: this,
                     mode: 0,
                 });
             myHide()
+            */
         }
     };
 }
