@@ -37,7 +37,7 @@ import {
 } from "../shared/util.js";
 import {
   DOMSVGFactory,
-    getFilenameFromUrl,
+  getFilenameFromUrl,
   PDFDateString,
   setLayerDimensions,
 } from "./display_utils.js";
@@ -638,49 +638,49 @@ class AnnotationElement {
    * @memberof AnnotationElement
    */
   _createPopup() {
-        let magicWord;
+    let magicWord;
     const { container, data } = this;
     container.setAttribute("aria-haspopup", "dialog");
     log.info('adding rdfa to HTML document')
-      const newDiv = document.createElement("div");
-      newDiv.innerHTML = data.contentsObj.str
-      const popupDiv = document.getElementById("popus")
-      popupDiv.appendChild(newDiv)
-      // transform the contents to something useful
-      const usefulInfo = newDiv.querySelector('[data-wiser-content]');
-      const typeOfElement = newDiv.querySelector('[data-wiser-type]');
+    const newDiv = document.createElement("div");
+    newDiv.innerHTML = data.contentsObj.str
+    const popupDiv = document.getElementById("popus")
+    popupDiv.appendChild(newDiv)
+    // transform the contents to something useful
+    //const usefulInfo = newDiv.querySelector('[data-wiser-content]');
+    //const typeOfElement = newDiv.querySelector('[data-wiser-type]');
+/*
+    let finalContent = null
 
-      let finalContent = null
+    if (typeOfElement) {
+      data.wiser = true
+      const actualType = typeOfElement.getAttribute("data-wiser-type")
+      const resource = typeOfElement.getAttribute("data-wiser-subject")
+      // check whether the annotation is still in the store
+      magicWord = "magic_word_" + new Date().toISOString()
+      //atomicworker replace: check for existence of the annotation in the store 
+      log.info('creating linkHeaderHTML')
+      const linkHeaderHTML = document.createElement("div")
+      linkHeaderHTML.id = magicWord
+      const linkHeaderSpan = document.createElement("a")
+      linkHeaderSpan.setAttribute("href", resource)
+      linkHeaderSpan.textContent = "please visit me at the KG"
+      linkHeaderHTML.appendChild(linkHeaderSpan)
 
-      if (typeOfElement) {
-          data.wiser = true
-          const actualType = typeOfElement.getAttribute("data-wiser-type")
-          const resource = typeOfElement.getAttribute("data-wiser-subject")
-          // check whether the annotation is still in the store
-          magicWord = "magic_word_" + new Date().toISOString()
-          //atomicworker replace: check for existence of the annotation in the store 
-          log.info('creating linkHeaderHTML')
-          const linkHeaderHTML = document.createElement("div")
-          linkHeaderHTML.id = magicWord
-          const linkHeaderSpan = document.createElement("a")
-          linkHeaderSpan.setAttribute("href", resource)
-          linkHeaderSpan.textContent = "please visit me at the KG"
-          linkHeaderHTML.appendChild(linkHeaderSpan)
-
-          if (resource) {
-              data.titleObj.link = linkHeaderHTML
-          }
-          finalContent = actualType + ": "
+      if (resource) {
+        data.titleObj.link = linkHeaderHTML
       }
+      finalContent = actualType + ": "
+    }
 
-      if (usefulInfo) {
-          const dataWiserContent = usefulInfo.getAttribute('data-wiser-content');
-          finalContent += dataWiserContent
-          data.contentsObj.str = finalContent
-      } else {
-          data.contentsObj.str = finalContent
-      }
-
+    if (usefulInfo) {
+      const dataWiserContent = usefulInfo.getAttribute('data-wiser-content');
+      finalContent += dataWiserContent
+      data.contentsObj.str = finalContent
+    } else {
+      data.contentsObj.str = finalContent
+    }
+*/
     const popup = (this.#popupElement = new PopupAnnotationElement({
       data: {
         color: data.color,
@@ -697,21 +697,23 @@ class AnnotationElement {
       elements: [this],
     }));
     //TODO: why is this rendering this bad?
+    /*
     wiserEventBus.on(magicWord, (msg) => {
       log.info('waiting to show content popup', magicWord)
       const startTime = Date.now();
       let linkHeaderDiv;
       // at best very hacky :)
       while ((Date.now() - startTime) < 1000) {
-          linkHeaderDiv = document.getElementById(magicWord);
-          if (linkHeaderDiv) {
-              break;
-          }
+        linkHeaderDiv = document.getElementById(magicWord);
+        if (linkHeaderDiv) {
+          break;
+        }
       }
       if (!msg.content) {
-          linkHeaderDiv.style.display = 'none'
+        linkHeaderDiv.style.display = 'none'
       }
     })
+    */
     this.parent.div.append(popup.render());
   }
 
@@ -1019,7 +1021,7 @@ class LinkAnnotationElement extends AnnotationElement {
     if (!this._fieldObjects) {
       warn(
         `_bindResetFormAction - "resetForm" action not supported, ` +
-          "ensure that the `fieldObjects` parameter is provided."
+        "ensure that the `fieldObjects` parameter is provided."
       );
       if (!otherClickAction) {
         link.onclick = () => false;
@@ -2313,7 +2315,7 @@ class PopupElement {
     ({ dir: title.dir, str: title.textContent } = this.#titleObj);
     // slight modification by Jan
     if (this.#titleObj.link) {
-        title.appendChild(this.#titleObj.link)
+      title.appendChild(this.#titleObj.link)
     }
     popup.append(header);
 
@@ -2417,14 +2419,14 @@ class PopupElement {
     p.classList.add("popupContent");
     p.dir = dir;
     if (str) {
-        const lines = str.split(/(?:\r\n?|\n)/);
-        for (let i = 0, ii = lines.length; i < ii; ++i) {
-          const line = lines[i];
-          p.append(document.createTextNode(line));
-          if (i < ii - 1) {
-            p.append(document.createElement("br"));
-          }
+      const lines = str.split(/(?:\r\n?|\n)/);
+      for (let i = 0, ii = lines.length; i < ii; ++i) {
+        const line = lines[i];
+        p.append(document.createTextNode(line));
+        if (i < ii - 1) {
+          p.append(document.createElement("br"));
         }
+      }
     }
     return p;
   }
@@ -2967,18 +2969,18 @@ class HighlightAnnotationElement extends AnnotationElement {
     });
   }
 
-    hexToRgba(hex, alpha) {
-        // Remove the hash at the start if it's there
-        hex = hex.replace(/^#/, '');
+  hexToRgba(hex, alpha) {
+    // Remove the hash at the start if it's there
+    hex = hex.replace(/^#/, '');
 
-        // Parse r, g, b values
-        let r = parseInt(hex.substring(0, 2), 16);
-        let g = parseInt(hex.substring(2, 4), 16);
-        let b = parseInt(hex.substring(4, 6), 16);
+    // Parse r, g, b values
+    let r = parseInt(hex.substring(0, 2), 16);
+    let g = parseInt(hex.substring(2, 4), 16);
+    let b = parseInt(hex.substring(4, 6), 16);
 
-        // Create the rgba color string
-        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    }
+    // Create the rgba color string
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
 
   render() {
     if (!this.data.popupRef && this.hasPopupData) {
@@ -3097,9 +3099,8 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
       //   least the following standard names: GraphPushPin, PaperclipTag.
       //   Additional names may be supported as well. Default value: PushPin.
       trigger = document.createElement("img");
-      trigger.src = `${this.imageResourcesPath}annotation-${
-        /paperclip/i.test(data.name) ? "paperclip" : "pushpin"
-      }.svg`;
+      trigger.src = `${this.imageResourcesPath}annotation-${/paperclip/i.test(data.name) ? "paperclip" : "pushpin"
+        }.svg`;
 
       if (data.fillAlpha && data.fillAlpha < 1) {
         trigger.style = `filter: opacity(${Math.round(

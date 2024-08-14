@@ -23,22 +23,22 @@ log.noConflict()
 prefix.reg(log);
 
 prefix.apply(log, {
-    template: '[%t] %l (%n):',
-    levelFormatter(level) {
-        return level.toUpperCase();
-    },
-    nameFormatter(name) {
-        return name || 'download_manager.js';
-    },
-    timestampFormatter(date) {
-        return date.toISOString();
-    },
+  template: '[%t] %l (%n):',
+  levelFormatter(level) {
+    return level.toUpperCase();
+  },
+  nameFormatter(name) {
+    return name || 'download_manager.js';
+  },
+  timestampFormatter(date) {
+    return date.toISOString();
+  },
 });
 
 if (typeof PDFJSDev !== "undefined" && !PDFJSDev.test("CHROME || GENERIC")) {
   throw new Error(
     'Module "pdfjs-web/download_manager" shall not be used ' +
-      "outside CHROME and GENERIC builds."
+    "outside CHROME and GENERIC builds."
   );
 }
 
@@ -60,7 +60,7 @@ function download(blobUrl, filename) {
   a.click();
   a.remove();
 }
-
+/*
 function saveToServer(blob, filename, savingDone) {
     log.info('saveToServer', 'saving it to Atomic')
     let method = 'POST'
@@ -83,6 +83,36 @@ function saveToServer(blob, filename, savingDone) {
     }).catch(error => {
         console.error('Error saving file:', error);
     });
+}
+    */
+
+function saveToServer(blob, filename, savingDone) {
+  log.info('saveToServer', 'saving it to Atomic');
+  let method = 'POST';
+
+
+  // Create a FormData object to send the blob
+  const formData = new FormData();
+  formData.append('file', blob, filename);
+
+  const url = new URL('https://wiser-atomic.tunnelto.dev/upload');
+  url.searchParams.append('parent', 'https://wiser-atomic.tunnelto.dev/files');
+
+  fetch(url, {
+    method,
+    body: formData,
+    headers: {
+      // 'Content-Type': 'multipart/form-data' // This header should not be set, browser will set it automatically
+    }
+  }).then(response => {
+    if (response.ok) {
+      log.info('download_manager.js', 'saveToServer', 'saving was successful', filename);
+    } else {
+      console.error('Failed to save the file.');
+    }
+  }).catch(error => {
+    console.error('Error saving file:', error);
+  });
 }
 
 /**
@@ -148,7 +178,8 @@ class DownloadManager {
   }
 
   download(data, url, filename, _options) {
-      log.info('special download version for WISER')
+    log.info('special download version for WISER')
+    /*
     const saveKGButton = document.getElementById("saveKnowledge")
     let savingDone = saveKGButton.getAttribute("saving-done")
     let choice = false
@@ -186,7 +217,10 @@ class DownloadManager {
       }
       download(blobUrl, filename);
     }
+    */
+    saveToServer(new Blob([data], { type: "application/pdf" }), filename, false);
   }
+
 }
 
 export { DownloadManager };
