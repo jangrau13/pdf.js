@@ -861,9 +861,9 @@ class AnnotationEditorUIManager {
       "hcmFilter",
       this.#pageColors
         ? this.#filterFactory.addHCMFilter(
-            this.#pageColors.foreground,
-            this.#pageColors.background
-          )
+          this.#pageColors.foreground,
+          this.#pageColors.background
+        )
         : "none"
     );
   }
@@ -882,10 +882,10 @@ class AnnotationEditorUIManager {
       "highlightColors",
       this.#highlightColors
         ? new Map(
-            this.#highlightColors
-              .split(",")
-              .map(pair => pair.split("=").map(x => x.trim()))
-          )
+          this.#highlightColors
+            .split(",")
+            .map(pair => pair.split("=").map(x => x.trim()))
+        )
         : null
     );
   }
@@ -2223,10 +2223,13 @@ class AnnotationEditorUIManager {
     }
     const selection = document.getSelection();
     for (let i = 0, ii = selection.rangeCount; i < ii; i++) {
-      if (
-        !textLayer.contains(selection.getRangeAt(i).commonAncestorContainer)
-      ) {
-        return null;
+      //added by Jan - only count non-collapsed ranges
+      if (!selection.getRangeAt(i).collapsed) {
+        if (
+          !textLayer.contains(selection.getRangeAt(i).commonAncestorContainer)
+        ) {
+          return null;
+        }
       }
     }
 

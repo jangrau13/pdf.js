@@ -321,12 +321,12 @@ function getDocument(src = {}) {
     typeof src.useWorkerFetch === "boolean"
       ? src.useWorkerFetch
       : (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) ||
-        (CMapReaderFactory === DOMCMapReaderFactory &&
-          StandardFontDataFactory === DOMStandardFontDataFactory &&
-          cMapUrl &&
-          standardFontDataUrl &&
-          isValidFetchUrl(cMapUrl, document.baseURI) &&
-          isValidFetchUrl(standardFontDataUrl, document.baseURI));
+      (CMapReaderFactory === DOMCMapReaderFactory &&
+        StandardFontDataFactory === DOMStandardFontDataFactory &&
+        cMapUrl &&
+        standardFontDataUrl &&
+        isValidFetchUrl(cMapUrl, document.baseURI) &&
+        isValidFetchUrl(standardFontDataUrl, document.baseURI));
   const canvasFactory =
     src.canvasFactory || new DefaultCanvasFactory({ ownerDocument, enableHWA });
   const filterFactory =
@@ -516,7 +516,7 @@ function getUrlProp(val) {
   }
   throw new Error(
     "Invalid PDF url data: " +
-      "either string or URL-object is expected in the url property."
+    "either string or URL-object is expected in the url property."
   );
 }
 
@@ -551,7 +551,7 @@ function getDataProp(val) {
   }
   throw new Error(
     "Invalid PDF binary data: either TypedArray, " +
-      "string, or array-like object is expected in the data property."
+    "string, or array-like object is expected in the data property."
   );
 }
 
@@ -761,7 +761,7 @@ class PDFDataRangeTransport {
     unreachable("Abstract method PDFDataRangeTransport.requestDataRange");
   }
 
-  abort() {}
+  abort() { }
 }
 
 /**
@@ -1554,7 +1554,7 @@ class PDFPageProxy {
         if (!(optionalContentConfig.renderingIntent & renderingIntent)) {
           throw new Error(
             "Must use the same `intent`-argument when calling the `PDFPageProxy.render` " +
-              "and `PDFDocumentProxy.getOptionalContentConfig` methods."
+            "and `PDFDocumentProxy.getOptionalContentConfig` methods."
           );
         }
         internalRenderTask.initializeGraphics({
@@ -2309,7 +2309,7 @@ class PDFWorker {
       if (cachedPort._pendingDestroy) {
         throw new Error(
           "PDFWorker.fromPort - the worker is being destroyed.\n" +
-            "Please remember to await `PDFDocumentLoadingTask.destroy()`-calls."
+          "Please remember to await `PDFDocumentLoadingTask.destroy()`-calls."
         );
       }
       return cachedPort;
@@ -2470,7 +2470,7 @@ class WorkerTransport {
 
         const annotationStorage =
           renderingIntent & RenderingIntentFlag.PRINT &&
-          printAnnotationStorage instanceof PrintAnnotationStorage
+            printAnnotationStorage instanceof PrintAnnotationStorage
             ? printAnnotationStorage
             : this.annotationStorage;
 
@@ -2900,7 +2900,7 @@ class WorkerTransport {
     if (this.annotationStorage.size <= 0) {
       warn(
         "saveDocument called while `annotationStorage` is empty, " +
-          "please use the getData-method instead."
+        "please use the getData-method instead."
       );
     }
 
@@ -3225,10 +3225,11 @@ function wiserSerializeHTMLElement(element, helper) {
   // Serialize any element with its children
   function serializeElementWithChildren(element) {
     log.debug('api.js', 'serializeElementWithChildren')
+    console.log('element', element)
     const elementObj = {
       tagName: element.tagName,
       attributes: {},
-      content: element.ariaLabel, // capture the inner HTML of the element
+      content: element.children.length == 0 ? element.innerText : "", // capture the inner HTML of the element
       children: [],
       scaleFactor, // add the scale factor
     };
@@ -3255,7 +3256,7 @@ function wiserSerializeHTMLElement(element, helper) {
 
   // Find the closest parent with the class "page" and return its height
   function analyzePageOfMark(element) {
-    log.info('api.js','analyzePageOfMark')
+    log.info('api.js', 'analyzePageOfMark')
     let parent = element.parentElement;
     while (parent && !parent.classList.contains("page")) {
       parent = parent.parentElement;
@@ -3264,7 +3265,7 @@ function wiserSerializeHTMLElement(element, helper) {
     const myWidth = parent.style.getPropertyValue("width");
     const pageNumber = parseInt(parent.dataset.pageNumber);
     const pageNumberDiv = document.createElement("div")
-    if(pageNumberDiv){
+    if (pageNumberDiv) {
       pageNumberDiv.setAttribute("id", "page-number-actual")
       pageNumberDiv.setAttribute("data-page-number-actual", pageNumber);
       document.body.appendChild(pageNumberDiv)
@@ -3284,7 +3285,7 @@ function wiserSerializeHTMLElement(element, helper) {
 
   // Find all mark elements and serialize their grandparent if it's 'div'
   function findAndSerializeMarks(element) {
-    log.debug('api.js','findAndSerializeMarks')
+    log.debug('api.js', 'findAndSerializeMarks')
     if (element.attributes.role && element.attributes.role.value === "mark") {
       // Check if the parent is 'div'
       if (
@@ -3470,8 +3471,8 @@ class InternalRenderTask {
       if (InternalRenderTask.#canvasInUse.has(this._canvas)) {
         throw new Error(
           "Cannot use the same canvas during multiple render() operations. " +
-            "Use different canvas or ensure previous operations were " +
-            "cancelled or completed."
+          "Use different canvas or ensure previous operations were " +
+          "cancelled or completed."
         );
       }
       InternalRenderTask.#canvasInUse.add(this._canvas);
@@ -3513,10 +3514,10 @@ class InternalRenderTask {
 
     this.callback(
       error ||
-        new RenderingCancelledException(
-          `Rendering cancelled, page ${this._pageIndex + 1}`,
-          extraDelay
-        )
+      new RenderingCancelledException(
+        `Rendering cancelled, page ${this._pageIndex + 1}`,
+        extraDelay
+      )
     );
   }
 

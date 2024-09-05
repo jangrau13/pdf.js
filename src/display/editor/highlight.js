@@ -134,6 +134,7 @@ class HighlightEditor extends AnnotationEditor {
     log.info('get input from modal')
     const storedInput = document.getElementById('rdfa-tmp-storage').getAttribute('data-user-input')
     if (storedInput) {
+      console.log('storedInput', storedInput)
       this.#rdfa_content = storedInput;
     }
     document.getElementById('rdfa-tmp-storage').removeAttribute('data-user-input');
@@ -295,7 +296,7 @@ class HighlightEditor extends AnnotationEditor {
   }
 
   /** @inheritdoc */
-  translateInPage(x, y) {}
+  translateInPage(x, y) { }
 
   /** @inheritdoc */
   get toolbarPosition() {
@@ -599,7 +600,7 @@ class HighlightEditor extends AnnotationEditor {
     log.info('testing for rdfa content', this.#rdfa_content)
     if (this.#rdfa_content) {
       const innerRdfa = document.createElement("div");
-      innerRdfa.setAttribute("id", "rdfa-"+ this.#id)
+      innerRdfa.setAttribute("id", "rdfa-" + this.#id)
       innerRdfa.setAttribute("class", "rdfa-content")
       innerRdfa.innerHTML = this.#rdfa_content;
       innerRdfa.style.display = "none";

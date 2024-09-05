@@ -638,7 +638,6 @@ class AnnotationElement {
    * @memberof AnnotationElement
    */
   _createPopup() {
-    let magicWord;
     const { container, data } = this;
     container.setAttribute("aria-haspopup", "dialog");
     log.info('adding rdfa to HTML document')
@@ -647,40 +646,65 @@ class AnnotationElement {
     const popupDiv = document.getElementById("popus")
     popupDiv.appendChild(newDiv)
     // transform the contents to something useful
-    //const usefulInfo = newDiv.querySelector('[data-wiser-content]');
-    //const typeOfElement = newDiv.querySelector('[data-wiser-type]');
-/*
-    let finalContent = null
+    data.titleObj.str = "Wiser Annotation";
+    // query for the about attribute in the child elements
+    const about = newDiv.querySelector('[about]')
 
-    if (typeOfElement) {
-      data.wiser = true
-      const actualType = typeOfElement.getAttribute("data-wiser-type")
-      const resource = typeOfElement.getAttribute("data-wiser-subject")
-      // check whether the annotation is still in the store
-      magicWord = "magic_word_" + new Date().toISOString()
-      //atomicworker replace: check for existence of the annotation in the store 
-      log.info('creating linkHeaderHTML')
-      const linkHeaderHTML = document.createElement("div")
-      linkHeaderHTML.id = magicWord
-      const linkHeaderSpan = document.createElement("a")
-      linkHeaderSpan.setAttribute("href", resource)
-      linkHeaderSpan.textContent = "please visit me at the KG"
-      linkHeaderHTML.appendChild(linkHeaderSpan)
 
-      if (resource) {
-        data.titleObj.link = linkHeaderHTML
-      }
-      finalContent = actualType + ": "
+    if (about) {
+      const subject = about.getAttribute('about');
+
+      // Create the div and button elements
+      const jump_to_div = document.createElement('div');
+      jump_to_div.style.position = 'relative'; // Set relative positioning for the parent container
+      jump_to_div.style.padding = '20px'; // Add padding
+      jump_to_div.style.margin = '10px'; // Add margin
+      jump_to_div.style.flexDirection = 'column'; // Align content in a column
+      jump_to_div.style.alignItems = 'center'; // Center the content
+      jump_to_div.style.border = '1px solid #ddd'; // Light border for a cleaner look
+      jump_to_div.style.borderRadius = '8px'; // Rounded corners for a more modern look
+      jump_to_div.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)'; // Add subtle shadow for depth
+
+      const delete_button = document.createElement('button');
+      delete_button.textContent = 'Delete';
+
+      // Ask for confirmation before sending out the deleteAnnotation event
+      delete_button.addEventListener('click', () => {
+        if (window.confirm('Are you sure you want to delete this annotation?')) {
+          const event = new CustomEvent('deleteAnnotation', {
+            detail: { source: this, annotationId: subject }
+          });
+          document.dispatchEvent(event);
+        }
+      });
+
+      // Style the delete button
+      delete_button.style.position = 'absolute'; // Position the button absolutely
+      delete_button.style.top = '10px'; // Place it at the top
+      delete_button.style.right = '10px'; // Place it at the right
+      delete_button.style.border = 'none'; // Remove the border
+      delete_button.style.padding = '5px 10px'; // Add padding
+      delete_button.style.cursor = 'pointer'; // Change the cursor to a pointer
+      delete_button.style.borderRadius = '5px'; // Rounded corners for the button
+      delete_button.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.2)'; // Subtle shadow for the button
+
+      // Create the link element
+      const link = document.createElement('a');
+      link.href = subject;
+      link.id = 'jump_to_' + subject;
+      link.textContent = 'Jump to annotation in KG';
+      link.style.display = 'block'; // Display as block element to separate from the button
+      link.style.marginTop = '20px'; // Add margin to separate from the delete button
+
+      // Append elements to the div
+      jump_to_div.appendChild(link);
+      jump_to_div.appendChild(delete_button);
+
+      data.contentsObj.str = "";
+      data.contentsObj.html = jump_to_div;
     }
 
-    if (usefulInfo) {
-      const dataWiserContent = usefulInfo.getAttribute('data-wiser-content');
-      finalContent += dataWiserContent
-      data.contentsObj.str = finalContent
-    } else {
-      data.contentsObj.str = finalContent
-    }
-*/
+
     const popup = (this.#popupElement = new PopupAnnotationElement({
       data: {
         color: data.color,
@@ -696,24 +720,7 @@ class AnnotationElement {
       parent: this.parent,
       elements: [this],
     }));
-    //TODO: why is this rendering this bad?
-    /*
-    wiserEventBus.on(magicWord, (msg) => {
-      log.info('waiting to show content popup', magicWord)
-      const startTime = Date.now();
-      let linkHeaderDiv;
-      // at best very hacky :)
-      while ((Date.now() - startTime) < 1000) {
-        linkHeaderDiv = document.getElementById(magicWord);
-        if (linkHeaderDiv) {
-          break;
-        }
-      }
-      if (!msg.content) {
-        linkHeaderDiv.style.display = 'none'
-      }
-    })
-    */
+
     this.parent.div.append(popup.render());
   }
 
@@ -2313,10 +2320,6 @@ class PopupElement {
     const title = document.createElement("h1");
     header.append(title);
     ({ dir: title.dir, str: title.textContent } = this.#titleObj);
-    // slight modification by Jan
-    if (this.#titleObj.link) {
-      title.appendChild(this.#titleObj.link)
-    }
     popup.append(header);
 
     if (this.#dateObj) {
@@ -2346,8 +2349,14 @@ class PopupElement {
       popup.lastChild.classList.add("richText", "popupContent");
     } else {
       const contents = this._formatContents(this.#contentsObj);
+      log.info("adding some API to add HTML directly to the popup", contents);
+
       popup.append(contents);
+      if (this.#contentsObj.html) {
+        popup.append(this.#contentsObj.html);
+      }
     }
+
     this.#container.append(popup);
   }
 

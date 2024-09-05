@@ -90,7 +90,6 @@ function saveToServer(blob, filename, savingDone) {
   log.info('saveToServer', 'saving it to Atomic');
   let method = 'POST';
 
-
   // Create a FormData object to send the blob
   const formData = new FormData();
   formData.append('file', blob, filename);
@@ -107,6 +106,9 @@ function saveToServer(blob, filename, savingDone) {
   }).then(response => {
     if (response.ok) {
       log.info('download_manager.js', 'saveToServer', 'saving was successful', filename);
+      window.alert('The file was saved successfully.');
+      window.location.href = window.location.href + '?timestamp=12345';
+      window.location.reload();
     } else {
       console.error('Failed to save the file.');
     }

@@ -1687,9 +1687,9 @@ class PDFViewer {
 
   _getVisiblePages() {
     const views =
-        this._scrollMode === ScrollMode.PAGE
-          ? this.#scrollModePageState.pages
-          : this._pages,
+      this._scrollMode === ScrollMode.PAGE
+        ? this.#scrollModePageState.pages
+        : this._pages,
       horizontal = this._scrollMode === ScrollMode.HORIZONTAL,
       rtl = horizontal && this._isContainerRtl;
 

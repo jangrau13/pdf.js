@@ -397,7 +397,7 @@ class Page {
             .catch(function (reason) {
               warn(
                 "save - ignoring annotation data during " +
-                  `"${task.name}" task: "${reason}".`
+                `"${task.name}" task: "${reason}".`
               );
               return null;
             })
@@ -610,7 +610,7 @@ class Page {
               .catch(function (reason) {
                 warn(
                   "getOperatorList - ignoring annotation data during " +
-                    `"${task.name}" task: "${reason}".`
+                  `"${task.name}" task: "${reason}".`
                 );
                 return {
                   opList: null,
@@ -1730,7 +1730,7 @@ class PDFDocument {
           promise = Promise.reject(pageDict);
 
           // Prevent "uncaught exception: Object"-messages in the console.
-          promise.catch(() => {});
+          promise.catch(() => { });
         } else {
           promise = Promise.resolve(
             new Page({
