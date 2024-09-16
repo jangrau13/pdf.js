@@ -19,6 +19,8 @@ import { createValidAbsoluteUrl, isPdfFile } from "pdfjs-lib";
 import log from 'loglevel'
 import prefix from "loglevel-plugin-prefix";
 
+const hostName = process.env.HOST || 'localhost';
+
 log.noConflict()
 prefix.reg(log);
 
@@ -94,8 +96,8 @@ function saveToServer(blob, filename, savingDone) {
   const formData = new FormData();
   formData.append('file', blob, filename);
 
-  const url = new URL('https://wiser-atomic.tunnelto.dev/upload');
-  url.searchParams.append('parent', 'https://wiser-atomic.tunnelto.dev/files');
+  const url = new URL(hostName + '/upload');
+  url.searchParams.append('parent', hostName + '/files');
 
   fetch(url, {
     method,
@@ -106,8 +108,13 @@ function saveToServer(blob, filename, savingDone) {
   }).then(response => {
     if (response.ok) {
       log.info('download_manager.js', 'saveToServer', 'saving was successful', filename);
+      window.location.href = window.location.href + '?timestamp=12345';
       window.alert('The file was saved successfully.');
       window.location.href = window.location.href + '?timestamp=12345';
+      const formerHostname = window.location.hostname
+      window.location.hostname = formerHostname + '?timestamp=12345';
+      window.location.reload();
+      window.location.hostname = formerHostname;
       window.location.reload();
     } else {
       console.error('Failed to save the file.');

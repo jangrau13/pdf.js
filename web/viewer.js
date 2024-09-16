@@ -14,13 +14,13 @@
  */
 
 
-import {RenderingStates, ScrollMode, SpreadMode} from "./ui_utils.js";
-import {AppOptions} from "./app_options.js";
-import {LinkTarget} from "./pdf_link_service.js";
-import {PDFViewerApplication} from "./app.js";
-import {RdfaParser} from "rdfa-streaming-parser";
+import { RenderingStates, ScrollMode, SpreadMode } from "./ui_utils.js";
+import { AppOptions } from "./app_options.js";
+import { LinkTarget } from "./pdf_link_service.js";
+import { PDFViewerApplication } from "./app.js";
+import { RdfaParser } from "rdfa-streaming-parser";
 import WiserEventBus from "./WiserEventBus.js";
-import {handleConceptButtons, handleUpdatePDFAfterKGAdd} from "./modals/workerHandler.js";
+import { handleConceptButtons, handleUpdatePDFAfterKGAdd } from "./modals/workerHandler.js";
 import log from 'loglevel'
 import prefix from "loglevel-plugin-prefix";
 
@@ -49,7 +49,7 @@ const pdfjsBuild =
 
 const AppConstants =
     typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")
-        ? {LinkTarget, RenderingStates, ScrollMode, SpreadMode}
+        ? { LinkTarget, RenderingStates, ScrollMode, SpreadMode }
         : null;
 window.PDFViewerApplication = PDFViewerApplication;
 window.PDFViewerApplicationConstants = AppConstants;
@@ -118,6 +118,7 @@ function getViewerConfiguration() {
             spreadEvenButton: document.getElementById("spreadEven"),
             documentPropertiesButton: document.getElementById("documentProperties"),
         },
+        /*
         sidebar: {
             // Divs (and sidebar button)
             outerContainer: document.getElementById("outerContainer"),
@@ -137,6 +138,7 @@ function getViewerConfiguration() {
             // View-specific options
             currentOutlineItemButton: document.getElementById("currentOutlineItem"),
         },
+        */
         findBar: {
             bar: document.getElementById("findbar"),
             toggleButton: document.getElementById("viewFind"),
@@ -322,14 +324,14 @@ class Modal {
                     console.log("not yet implemented type", e)
             }
         };
-
+ 
         // now init the buttons
         window.myAtomicWorker.postMessage({
             type: 'getConcepts',
             user: 'potentialUser'
         });
-
-
+ 
+ 
         window.myAtomicWorker = myAtomicWorker
         */
     }
