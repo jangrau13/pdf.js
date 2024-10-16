@@ -103,19 +103,21 @@ function saveToServer(blob, filename, savingDone) {
     method,
     body: formData,
     headers: {
-      // 'Content-Type': 'multipart/form-data' // This header should not be set, browser will set it automatically
+      // 'Content-Type': 'multipart/form-data' 
     }
   }).then(response => {
     if (response.ok) {
       log.info('download_manager.js', 'saveToServer', 'saving was successful', filename);
-      window.location.href = window.location.href + '?timestamp=12345';
       window.alert('The file was saved successfully.');
+      /*
+      window.location.href = window.location.href + '?timestamp=12345';
       window.location.href = window.location.href + '?timestamp=12345';
       const formerHostname = window.location.hostname
       window.location.hostname = formerHostname + '?timestamp=12345';
       window.location.reload();
       window.location.hostname = formerHostname;
       window.location.reload();
+      */
     } else {
       console.error('Failed to save the file.');
     }

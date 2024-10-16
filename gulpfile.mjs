@@ -51,7 +51,7 @@ import rimraf from "rimraf";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const HOST = "http://localhost:9883"
+const HOST = "https://wiser-sp4.interactions.ics.unisg.ch"
 
 const BUILD_DIR = "build/";
 const L10N_DIR = "l10n/";
