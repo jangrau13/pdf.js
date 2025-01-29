@@ -21,6 +21,8 @@
 /** @typedef {import("./interfaces").IDownloadManager} IDownloadManager */
 /** @typedef {import("./interfaces").IPDFLinkService} IPDFLinkService */
 // eslint-disable-next-line max-len
+/** @typedef {import("./struct_tree_layer_builder.js").StructTreeLayerBuilder} StructTreeLayerBuilder */
+// eslint-disable-next-line max-len
 /** @typedef {import("./text_accessibility.js").TextAccessibilityManager} TextAccessibilityManager */
 // eslint-disable-next-line max-len
 /** @typedef {import("../src/display/editor/tools.js").AnnotationEditorUIManager} AnnotationEditorUIManager */
@@ -45,6 +47,13 @@ import { PresentationModeState } from "./ui_utils.js";
  * @property {TextAccessibilityManager} [accessibilityManager]
  * @property {AnnotationEditorUIManager} [annotationEditorUIManager]
  * @property {function} [onAppend]
+ */
+
+/**
+ * @typedef {Object} AnnotationLayerBuilderRenderOptions
+ * @property {PageViewport} viewport
+ * @property {string} [intent] - The default value is "display".
+ * @property {StructTreeLayerBuilder} [structTreeLayer]
  */
 
 class AnnotationLayerBuilder {
@@ -91,12 +100,11 @@ class AnnotationLayerBuilder {
   }
 
   /**
-   * @param {PageViewport} viewport
-   * @param {string} intent (default value is 'display')
+   * @param {AnnotationLayerBuilderRenderOptions} options
    * @returns {Promise<void>} A promise that is resolved when rendering of the
    *   annotations is complete.
    */
-  async render(viewport, intent = "display") {
+  async render({ viewport, intent = "display", structTreeLayer = null }) {
     if (this.div) {
       if (this._cancelled || !this.annotationLayer) {
         return;
@@ -136,6 +144,7 @@ class AnnotationLayerBuilder {
       annotationEditorUIManager: this._annotationEditorUIManager,
       page: this.pdfPage,
       viewport: viewport.clone({ dontFlip: true }),
+      structTreeLayer,
     });
 
     await this.annotationLayer.render({
@@ -180,6 +189,10 @@ class AnnotationLayerBuilder {
       return;
     }
     this.div.hidden = true;
+  }
+
+  hasEditableAnnotations() {
+    return !!this.annotationLayer?.hasEditableAnnotations();
   }
 
   #updatePresentationModeState(state) {

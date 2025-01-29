@@ -21,7 +21,7 @@ import {
   DEFAULT_SCALE_VALUE,
   MAX_SCALE,
   MIN_SCALE,
-  toggleCheckedBtn,
+  toggleExpandedBtn,
 } from "./ui_utils.js";
 
 /**
@@ -38,20 +38,26 @@ import {
  * @property {HTMLButtonElement} next - Button to go to the next page.
  * @property {HTMLButtonElement} zoomIn - Button to zoom in the pages.
  * @property {HTMLButtonElement} zoomOut - Button to zoom out the pages.
- * @property {HTMLButtonElement} viewFind - Button to open find bar.
  * @property {HTMLButtonElement} editorFreeTextButton - Button to switch to
  *   FreeText editing.
  * @property {HTMLButtonElement} download - Button to download the document.
  */
 
 class Toolbar {
+  #colorPicker = null;
+
   #opts;
 
   /**
    * @param {ToolbarOptions} options
    * @param {EventBus} eventBus
+   * @param {number} toolbarDensity - The toolbar density value.
+   *   The possible values are:
+   *    - 0 (default) - The regular toolbar size.
+   *    - 1 (compact) - The small toolbar size.
+   *    - 2 (touch) - The large toolbar size.
    */
-  constructor(options, eventBus) {
+  constructor(options, eventBus, toolbarDensity = 0) {
     this.#opts = options;
     console.log('creating opts', options);
     this.eventBus = eventBus;
@@ -109,41 +115,31 @@ class Toolbar {
               : AnnotationEditorType.STAMP;
           },
         },
+        telemetry: {
+          type: "editing",
+          data: { action: "pdfjs.image.icon_click" },
+        },
       },
     ];
 
     // Bind the event listeners for click and various other actions.
     this.#bindListeners(buttons);
 
-    if (options.editorHighlightColorPicker) {
-      eventBus._on(
-        "annotationeditoruimanager",
-        ({ uiManager }) => {
-          this.#setAnnotationEditorUIManager(
-            uiManager,
-            options.editorHighlightColorPicker
-          );
-        },
-        // Once the color picker has been added, we don't want to add it again.
-        { once: true }
-      );
-    }
-
-    eventBus._on("showannotationeditorui", ({ mode }) => {
-      switch (mode) {
-        case AnnotationEditorType.HIGHLIGHT:
-          options.editorHighlightButton.click();
-          break;
-      }
-    });
-
+    this.#updateToolbarDensity({ value: toolbarDensity });
     this.reset();
   }
 
-  #setAnnotationEditorUIManager(uiManager, parentContainer) {
-    const colorPicker = new ColorPicker({ uiManager });
-    uiManager.setMainHighlightColorPicker(colorPicker);
-    parentContainer.append(colorPicker.renderMainDropdown());
+  #updateToolbarDensity({ value }) {
+    let name = "normal";
+    switch (value) {
+      case 1:
+        name = "compact";
+        break;
+      case 2:
+        name = "touch";
+        break;
+    }
+    document.documentElement.setAttribute("data-toolbar-density", name);
   }
 
   setPageNumber(pageNumber, pageLabel) {
@@ -165,6 +161,7 @@ class Toolbar {
   }
 
   reset() {
+    this.#colorPicker = null;
     this.pageNumber = 0;
     this.pageLabel = null;
     this.hasPageLabels = false;
@@ -180,11 +177,16 @@ class Toolbar {
 
   #bindListeners(buttons) {
     const { eventBus } = this;
-    const { pageNumber, scaleSelect } = this.#opts;
+    const {
+      editorHighlightColorPicker,
+      editorHighlightButton,
+      pageNumber,
+      scaleSelect,
+    } = this.#opts;
     const self = this;
 
     // The buttons within the toolbar.
-    for (const { element, eventName, eventDetails } of buttons) {
+    for (const { element, eventName, eventDetails, telemetry } of buttons) {
       element.addEventListener("click", evt => {
         if (eventName !== null) {
           eventBus.dispatch(eventName, {
@@ -192,6 +194,12 @@ class Toolbar {
             ...eventDetails,
             // evt.detail is the number of clicks.
             isFromKeyboard: evt.detail === 0,
+          });
+        }
+        if (telemetry) {
+          eventBus.dispatch("reporttelemetry", {
+            source: this,
+            details: telemetry,
           });
         }
       });
@@ -235,6 +243,26 @@ class Toolbar {
       "annotationeditormodechanged",
       this.#editorModeChanged.bind(this)
     );
+    eventBus._on("showannotationeditorui", ({ mode }) => {
+      switch (mode) {
+        case AnnotationEditorType.HIGHLIGHT:
+          editorHighlightButton.click();
+          break;
+      }
+    });
+    eventBus._on("toolbardensity", this.#updateToolbarDensity.bind(this));
+
+    if (editorHighlightColorPicker) {
+      eventBus._on("annotationeditoruimanager", ({ uiManager }) => {
+        const cp = (this.#colorPicker = new ColorPicker({ uiManager }));
+        uiManager.setMainHighlightColorPicker(cp);
+        editorHighlightColorPicker.append(cp.renderMainDropdown());
+      });
+
+      eventBus._on("mainhighlightcolorpickerupdatecolor", ({ value }) => {
+        this.#colorPicker?.updateColor(value);
+      });
+    }
   }
 
   #editorModeChanged({ mode }) {
@@ -249,22 +277,22 @@ class Toolbar {
       editorStampParamsToolbar,
     } = this.#opts;
 
-    toggleCheckedBtn(
+    toggleExpandedBtn(
       editorFreeTextButton,
       mode === AnnotationEditorType.FREETEXT,
       editorFreeTextParamsToolbar
     );
-    toggleCheckedBtn(
+    toggleExpandedBtn(
       editorHighlightButton,
       mode === AnnotationEditorType.HIGHLIGHT,
       editorHighlightParamsToolbar
     );
-    toggleCheckedBtn(
+    toggleExpandedBtn(
       editorInkButton,
       mode === AnnotationEditorType.INK,
       editorInkParamsToolbar
     );
-    toggleCheckedBtn(
+    toggleExpandedBtn(
       editorStampButton,
       mode === AnnotationEditorType.STAMP,
       editorStampParamsToolbar

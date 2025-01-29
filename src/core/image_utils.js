@@ -13,17 +13,15 @@
  * limitations under the License.
  */
 
-import {
-  assert,
-  MAX_IMAGE_SIZE_TO_CACHE,
-  unreachable,
-  warn,
-} from "../shared/util.js";
+import { assert, unreachable, warn } from "../shared/util.js";
 import { RefSet, RefSetCache } from "./primitives.js";
 
 class BaseLocalCache {
   constructor(options) {
-    if (this.constructor === BaseLocalCache) {
+    if (
+      (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) &&
+      this.constructor === BaseLocalCache
+    ) {
       unreachable("Cannot initialize BaseLocalCache.");
     }
     this._onlyRefs = options?.onlyRefs === true;
@@ -176,7 +174,7 @@ class GlobalImageCache {
 
   static MIN_IMAGES_TO_CACHE = 10;
 
-  static MAX_BYTE_SIZE = 5 * MAX_IMAGE_SIZE_TO_CACHE;
+  static MAX_BYTE_SIZE = 5e7; // Fifty megabytes.
 
   #decodeFailedSet = new RefSet();
 

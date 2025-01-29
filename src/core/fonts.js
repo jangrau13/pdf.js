@@ -26,6 +26,7 @@ import {
 import { CFFCompiler, CFFParser } from "./cff_parser.js";
 import {
   FontFlags,
+  getVerticalPresentationForm,
   MacStandardGlyphOrdering,
   normalizeFontName,
   recoverGlyphName,
@@ -1243,7 +1244,7 @@ class Font {
         getDingbatsGlyphsUnicode(),
         this.differences
       );
-    } else if (isStandardFont) {
+    } else if (isStandardFont || isMappedToStandardFont) {
       const map = buildToFontChar(
         this.defaultEncoding,
         getGlyphsUnicode(),
@@ -1759,17 +1760,22 @@ class Font {
       mappings.sort(function (a, b) {
         return a.charCode - b.charCode;
       });
-      for (let i = 1; i < mappings.length; i++) {
-        if (mappings[i - 1].charCode === mappings[i].charCode) {
-          mappings.splice(i, 1);
-          i--;
+      const finalMappings = [],
+        seenCharCodes = new Set();
+      for (const map of mappings) {
+        const { charCode } = map;
+
+        if (seenCharCodes.has(charCode)) {
+          continue;
         }
+        seenCharCodes.add(charCode);
+        finalMappings.push(map);
       }
 
       return {
         platformId: potentialTable.platformId,
         encodingId: potentialTable.encodingId,
-        mappings,
+        mappings: finalMappings,
         hasShortCmap,
       };
     }
@@ -2386,7 +2392,7 @@ class Font {
           } else {
             for (j = 0; j < n; j++) {
               b = data[i++];
-              stack.push((b << 8) | data[i++]);
+              stack.push(signedInt16(b, data[i++]));
             }
           }
         } else if (op === 0x2b && !tooComplexToFollowFunctions) {
@@ -3295,6 +3301,47 @@ class Font {
   /**
    * @private
    */
+  get _spaceWidth() {
+    // trying to estimate space character width
+    const possibleSpaceReplacements = ["space", "minus", "one", "i", "I"];
+    let width;
+    for (const glyphName of possibleSpaceReplacements) {
+      // if possible, getting width by glyph name
+      if (glyphName in this.widths) {
+        width = this.widths[glyphName];
+        break;
+      }
+      const glyphsUnicodeMap = getGlyphsUnicode();
+      const glyphUnicode = glyphsUnicodeMap[glyphName];
+      // finding the charcode via unicodeToCID map
+      let charcode = 0;
+      if (this.composite && this.cMap.contains(glyphUnicode)) {
+        charcode = this.cMap.lookup(glyphUnicode);
+
+        if (typeof charcode === "string") {
+          charcode = convertCidString(glyphUnicode, charcode);
+        }
+      }
+      // ... via toUnicode map
+      if (!charcode && this.toUnicode) {
+        charcode = this.toUnicode.charCodeOf(glyphUnicode);
+      }
+      // setting it to unicode if negative or undefined
+      if (charcode <= 0) {
+        charcode = glyphUnicode;
+      }
+      // trying to get width via charcode
+      width = this.widths[charcode];
+      if (width) {
+        break; // the non-zero width found
+      }
+    }
+    return shadow(this, "_spaceWidth", width || this.defaultWidth);
+  }
+
+  /**
+   * @private
+   */
   _charToGlyph(charcode, isSpace = false) {
     let glyph = this._glyphCache[charcode];
     // All `Glyph`-properties, except `isSpace` in multi-byte strings,
@@ -3337,6 +3384,13 @@ class Font {
         // .notdef glyphs should be invisible in non-embedded Type1 fonts, so
         // replace them with spaces.
         fontCharCode = 0x20;
+
+        if (glyphName === "") {
+          // Ensure that other relevant glyph properties are also updated
+          // (fixes issue18059.pdf).
+          width ||= this._spaceWidth;
+          unicode = String.fromCharCode(fontCharCode);
+        }
       }
       fontCharCode = mapSpecialUnicodeValues(fontCharCode);
     }
@@ -3363,6 +3417,13 @@ class Font {
         fontChar = String.fromCodePoint(fontCharCode);
       } else {
         warn(`charToGlyph - invalid fontCharCode: ${fontCharCode}`);
+      }
+    }
+
+    if (this.missingFile && this.vertical && fontChar.length === 1) {
+      const vertical = getVerticalPresentationForm()[fontChar.charCodeAt(0)];
+      if (vertical) {
+        fontChar = unicode = String.fromCharCode(vertical);
       }
     }
 

@@ -50,20 +50,26 @@ import {
   InvalidPDFException,
   isDataScheme,
   isPdfFile,
-  MissingPDFException,
   PDFWorker,
+  ResponseException,
   shadow,
-  UnexpectedResponseException,
+  stopEvent,
+  TouchManager,
   version,
 } from "pdfjs-lib";
 import { AppOptions, OptionKind } from "./app_options.js";
-import { AutomationEventBus, EventBus } from "./event_utils.js";
+import { EventBus, FirefoxEventBus } from "./event_utils.js";
 import { ExternalServices, initCom, MLManager } from "web-external_services";
+import {
+  ImageAltTextSettings,
+  NewAltTextManager,
+} from "web-new_alt_text_manager";
 import { LinkTarget, PDFLinkService } from "./pdf_link_service.js";
 import { AltTextManager } from "web-alt_text_manager";
 import { AnnotationEditorParams } from "web-annotation_editor_params";
 import { CaretBrowsingMode } from "./caret_browsing.js";
 import { DownloadManager } from "web-download_manager";
+import { EditorUndoBar } from "./editor_undo_bar.js";
 import { OverlayManager } from "./overlay_manager.js";
 import { PasswordPrompt } from "./password_prompt.js";
 import { PDFAttachmentViewer } from "web-pdf_attachment_viewer";
@@ -89,7 +95,6 @@ import log from 'loglevel';
 import prefix from 'loglevel-plugin-prefix'
 
 const FORCE_PAGES_LOADED_TIMEOUT = 10000; // ms
-const WHEEL_ZOOM_DISABLED_TIMEOUT = 1000; // ms
 
 const ViewOnLoad = {
   UNKNOWN: -1,
@@ -142,7 +147,7 @@ const PDFViewerApplication = {
   /** @type {OverlayManager} */
   overlayManager: null,
   /** @type {Preferences} */
-  preferences: null,
+  preferences: new Preferences(),
   /** @type {Toolbar} */
   toolbar: null,
   /** @type {SecondaryToolbar} */
@@ -153,11 +158,13 @@ const PDFViewerApplication = {
   l10n: null,
   /** @type {AnnotationEditorParams} */
   annotationEditorParams: null,
+  /** @type {ImageAltTextSettings} */
+  imageAltTextSettings: null,
   isInitialViewSet: false,
-  downloadComplete: false,
   isViewerEmbedded: window.parent !== window,
   url: "",
   baseUrl: "",
+  mlManager: null,
   _downloadUrl: "",
   _eventBusAbortController: null,
   _windowAbortController: null,
@@ -169,42 +176,28 @@ const PDFViewerApplication = {
   _saveInProgress: false,
   _wheelUnusedTicks: 0,
   _wheelUnusedFactor: 1,
+  _touchManager: null,
   _touchUnusedTicks: 0,
   _touchUnusedFactor: 1,
   _PDFBug: null,
   _hasAnnotationEditors: false,
   _title: document.title,
   _printAnnotationStoragePromise: null,
-  _touchInfo: null,
   _isCtrlKeyDown: false,
-  _nimbusDataPromise: null,
   _caretBrowsing: null,
   _isScrolling: false,
+  editorUndoBar: null,
 
   // Called once when the document is loaded.
   async initialize(appConfig) {
-    let l10nPromise;
-    // In the (various) extension builds, where the locale is set automatically,
-    // initialize the `L10n`-instance as soon as possible.
-    if (typeof PDFJSDev !== "undefined" && !PDFJSDev.test("GENERIC")) {
-      l10nPromise = this.externalServices.createL10n();
-    }
     this.appConfig = appConfig;
-
-    if (
-      typeof PDFJSDev === "undefined"
-        ? window.isGECKOVIEW
-        : PDFJSDev.test("GECKOVIEW")
-    ) {
-      this._nimbusDataPromise = this.externalServices.getNimbusExperimentData();
-    }
 
     // Ensure that `Preferences`, and indirectly `AppOptions`, have initialized
     // before creating e.g. the various viewer components.
     try {
       await this.preferences.initializedPromise;
     } catch (ex) {
-      console.error(`initialize: "${ex.message}".`);
+      console.error("initialize:", ex);
     }
     if (AppOptions.get("pdfBugEnabled")) {
       await this._parseHashParams();
@@ -223,14 +216,31 @@ const PDFViewerApplication = {
       if (mode) {
         document.documentElement.classList.add(mode);
       }
+      if (typeof PDFJSDev === "undefined" || PDFJSDev.test("TESTING")) {
+        if (AppOptions.get("enableFakeMLManager")) {
+          this.mlManager =
+            MLManager.getFakeMLManager?.({
+              enableGuessAltText: AppOptions.get("enableGuessAltText"),
+              enableAltTextModelDownload: AppOptions.get(
+                "enableAltTextModelDownload"
+              ),
+            }) || null;
+        }
+      }
+    } else if (AppOptions.get("enableAltText")) {
+      // We want to load the image-to-text AI engine as soon as possible.
+      this.mlManager = new MLManager({
+        enableGuessAltText: AppOptions.get("enableGuessAltText"),
+        enableAltTextModelDownload: AppOptions.get(
+          "enableAltTextModelDownload"
+        ),
+        altTextLearnMoreUrl: AppOptions.get("altTextLearnMoreUrl"),
+      });
     }
 
     // Ensure that the `L10n`-instance has been initialized before creating
     // e.g. the various viewer components.
-    if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-      l10nPromise = this.externalServices.createL10n();
-    }
-    this.l10n = await l10nPromise;
+    this.l10n = await this.externalServices.createL10n();
     document.getElementsByTagName("html")[0].dir = this.l10n.getDirection();
     // Connect Fluent, when necessary, and translate what we already have.
     if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
@@ -280,6 +290,7 @@ const PDFViewerApplication = {
       this._PDFBug = PDFBug;
     };
 
+    // Parameters that need to be handled manually.
     if (params.get("disableworker") === "true") {
       try {
         GlobalWorkerOptions.workerSrc ||= AppOptions.get("workerSrc");
@@ -290,32 +301,8 @@ const PDFViewerApplication = {
           await __non_webpack_import__(PDFWorker.workerSrc);
         }
       } catch (ex) {
-        console.error(`_parseHashParams: "${ex.message}".`);
+        console.error("_parseHashParams:", ex);
       }
-    }
-    if (params.has("disablerange")) {
-      AppOptions.set("disableRange", params.get("disablerange") === "true");
-    }
-    if (params.has("disablestream")) {
-      AppOptions.set("disableStream", params.get("disablestream") === "true");
-    }
-    if (params.has("disableautofetch")) {
-      AppOptions.set(
-        "disableAutoFetch",
-        params.get("disableautofetch") === "true"
-      );
-    }
-    if (params.has("disablefontface")) {
-      AppOptions.set(
-        "disableFontFace",
-        params.get("disablefontface") === "true"
-      );
-    }
-    if (params.has("disablehistory")) {
-      AppOptions.set("disableHistory", params.get("disablehistory") === "true");
-    }
-    if (params.has("verbosity")) {
-      AppOptions.set("verbosity", params.get("verbosity") | 0);
     }
     if (params.has("textlayer")) {
       switch (params.get("textlayer")) {
@@ -330,7 +317,7 @@ const PDFViewerApplication = {
             await loadPDFBug();
             this._PDFBug.loadCSS();
           } catch (ex) {
-            console.error(`_parseHashParams: "${ex.message}".`);
+            console.error("_parseHashParams:", ex);
           }
           break;
       }
@@ -343,7 +330,7 @@ const PDFViewerApplication = {
         await loadPDFBug();
         this._PDFBug.init(mainContainer, enabled);
       } catch (ex) {
-        console.error(`_parseHashParams: "${ex.message}".`);
+        console.error("_parseHashParams:", ex);
       }
     }
     // It is not possible to change locale for the (various) extension builds.
@@ -351,34 +338,39 @@ const PDFViewerApplication = {
       (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) &&
       params.has("locale")
     ) {
-      AppOptions.set("locale", params.get("locale"));
+      AppOptions.set("localeProperties", { lang: params.get("locale") });
     }
+
+    // Parameters that can be handled automatically.
+    const opts = {
+      disableAutoFetch: x => x === "true",
+      disableFontFace: x => x === "true",
+      disableHistory: x => x === "true",
+      disableRange: x => x === "true",
+      disableStream: x => x === "true",
+      verbosity: x => x | 0,
+    };
 
     // Set some specific preferences for tests.
     if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("TESTING")) {
-      if (params.has("highlighteditorcolors")) {
-        AppOptions.set(
-          "highlightEditorColors",
-          params.get("highlighteditorcolors")
-        );
-      }
-      if (params.has("maxcanvaspixels")) {
-        AppOptions.set(
-          "maxCanvasPixels",
-          Number(params.get("maxcanvaspixels"))
-        );
-      }
-      if (params.has("supportscaretbrowsingmode")) {
-        AppOptions.set(
-          "supportsCaretBrowsingMode",
-          params.get("supportscaretbrowsingmode") === "true"
-        );
-      }
-      if (params.has("spreadmodeonload")) {
-        AppOptions.set(
-          "spreadModeOnLoad",
-          parseInt(params.get("spreadmodeonload"))
-        );
+      Object.assign(opts, {
+        enableAltText: x => x === "true",
+        enableFakeMLManager: x => x === "true",
+        enableGuessAltText: x => x === "true",
+        enableUpdatedAddImage: x => x === "true",
+        highlightEditorColors: x => x,
+        maxCanvasPixels: x => parseInt(x),
+        spreadModeOnLoad: x => parseInt(x),
+        supportsCaretBrowsingMode: x => x === "true",
+      });
+    }
+
+    for (const name in opts) {
+      const check = opts[name],
+        key = name.toLowerCase();
+
+      if (params.has(key)) {
+        AppOptions.set(name, check(params.get(key)));
       }
     }
   },
@@ -460,14 +452,29 @@ const PDFViewerApplication = {
           foreground: AppOptions.get("pageColorsForeground"),
         }
         : null;
-    const altTextManager = appConfig.altTextDialog
-      ? new AltTextManager(
-        appConfig.altTextDialog,
-        container,
-        this.overlayManager,
-        eventBus
-      )
-      : null;
+    let altTextManager;
+    if (AppOptions.get("enableUpdatedAddImage")) {
+      altTextManager = appConfig.newAltTextDialog
+        ? new NewAltTextManager(
+          appConfig.newAltTextDialog,
+          this.overlayManager,
+          eventBus
+        )
+        : null;
+    } else {
+      altTextManager = appConfig.altTextDialog
+        ? new AltTextManager(
+          appConfig.altTextDialog,
+          container,
+          this.overlayManager,
+          eventBus
+        )
+        : null;
+    }
+
+    if (appConfig.editorUndoBar) {
+      this.editorUndoBar = new EditorUndoBar(appConfig.editorUndoBar, eventBus);
+    }
 
     const enableHWA = AppOptions.get("enableHWA");
     const pdfViewer = new PDFViewer({
@@ -478,6 +485,7 @@ const PDFViewerApplication = {
       linkService: pdfLinkService,
       downloadManager,
       altTextManager,
+      editorUndoBar: this.editorUndoBar,
       findController,
       scriptingManager:
         AppOptions.get("enableScripting") && pdfScriptingManager,
@@ -489,6 +497,10 @@ const PDFViewerApplication = {
       enableHighlightFloatingButton: AppOptions.get(
         "enableHighlightFloatingButton"
       ),
+      enableUpdatedAddImage: AppOptions.get("enableUpdatedAddImage"),
+      enableNewAltTextWhenAddingImage: AppOptions.get(
+        "enableNewAltTextWhenAddingImage"
+      ),
       imageResourcesPath: AppOptions.get("imageResourcesPath"),
       enablePrintAutoRotate: AppOptions.get("enablePrintAutoRotate"),
       maxCanvasPixels: AppOptions.get("maxCanvasPixels"),
@@ -497,6 +509,7 @@ const PDFViewerApplication = {
       mlManager: this.mlManager,
       abortSignal: this._globalAbortController.signal,
       enableHWA,
+      supportsPinchToZoom: this.supportsPinchToZoom,
     });
     this.pdfViewer = pdfViewer;
 
@@ -528,20 +541,19 @@ const PDFViewerApplication = {
     }
 
     if (!this.supportsIntegratedFind && appConfig.findBar) {
-      this.findBar = new PDFFindBar(appConfig.findBar, eventBus);
+      this.findBar = new PDFFindBar(
+        appConfig.findBar,
+        appConfig.principalContainer,
+        eventBus
+      );
     }
 
     if (appConfig.annotationEditorParams) {
-      if (annotationEditorMode !== AnnotationEditorType.DISABLE) {
-        if (AppOptions.get("enableStampEditor")) {
-          appConfig.toolbar?.editorStampButton?.classList.remove("hidden");
-        }
-
-        const editorHighlightButton = appConfig.toolbar?.editorHighlightButton;
-        if (editorHighlightButton && AppOptions.get("enableHighlightEditor")) {
-          editorHighlightButton.hidden = false;
-        }
-
+      if (
+        ((typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) ||
+          typeof AbortSignal.any === "function") &&
+        annotationEditorMode !== AnnotationEditorType.DISABLE
+      ) {
         this.annotationEditorParams = new AnnotationEditorParams(
           appConfig.annotationEditorParams,
           eventBus
@@ -551,6 +563,18 @@ const PDFViewerApplication = {
           document.getElementById(id)?.classList.add("hidden");
         }
       }
+    }
+
+    if (
+      this.mlManager &&
+      appConfig.secondaryToolbar?.imageAltTextSettingsButton
+    ) {
+      this.imageAltTextSettings = new ImageAltTextSettings(
+        appConfig.altTextSettingsDialog,
+        this.overlayManager,
+        eventBus,
+        this.mlManager
+      );
     }
 
     if (appConfig.documentProperties) {
@@ -579,17 +603,29 @@ const PDFViewerApplication = {
           ? window.isGECKOVIEW
           : PDFJSDev.test("GECKOVIEW")
       ) {
+        const nimbusData = JSON.parse(
+          AppOptions.get("nimbusDataStr") || "null"
+        );
+        this.toolbar = new Toolbar(appConfig.toolbar, eventBus, nimbusData);
+      } else {
         this.toolbar = new Toolbar(
           appConfig.toolbar,
           eventBus,
-          await this._nimbusDataPromise
+          AppOptions.get("toolbarDensity")
         );
-      } else {
-        this.toolbar = new Toolbar(appConfig.toolbar, eventBus);
       }
     }
 
     if (appConfig.secondaryToolbar) {
+      if (AppOptions.get("enableAltText")) {
+        appConfig.secondaryToolbar.imageAltTextSettingsButton?.classList.remove(
+          "hidden"
+        );
+        appConfig.secondaryToolbar.imageAltTextSettingsSeparator?.classList.remove(
+          "hidden"
+        );
+      }
+
       this.secondaryToolbar = new SecondaryToolbar(
         appConfig.secondaryToolbar,
         eventBus
@@ -666,7 +702,6 @@ const PDFViewerApplication = {
   },
 
   async run(config) {
-    this.preferences = new Preferences();
     await this.initialize(config);
 
     const { appConfig, eventBus } = this;
@@ -717,8 +752,7 @@ const PDFViewerApplication = {
           if (item.type === "application/pdf") {
             evt.dataTransfer.dropEffect =
               evt.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
-            evt.preventDefault();
-            evt.stopPropagation();
+            stopEvent(evt);
             return;
           }
         }
@@ -727,8 +761,7 @@ const PDFViewerApplication = {
         if (evt.dataTransfer.files?.[0].type !== "application/pdf") {
           return;
         }
-        evt.preventDefault();
-        evt.stopPropagation();
+        stopEvent(evt);
         eventBus.dispatch("fileinputchange", {
           source: this,
           fileInput: evt.dataTransfer,
@@ -755,7 +788,7 @@ const PDFViewerApplication = {
     }
 
     if (this.supportsIntegratedFind) {
-      appConfig.toolbar?.viewFind?.classList.add("hidden");
+      appConfig.findBar?.toggleButton?.classList.add("hidden");
     }
 
     if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
@@ -775,14 +808,6 @@ const PDFViewerApplication = {
 
   get externalServices() {
     return shadow(this, "externalServices", new ExternalServices());
-  },
-
-  get mlManager() {
-    return shadow(
-      this,
-      "mlManager",
-      AppOptions.get("enableML") === true ? new MLManager() : null
-    );
   },
 
   get initialized() {
@@ -818,6 +843,29 @@ const PDFViewerApplication = {
       return;
     }
     this.pdfViewer.currentScaleValue = DEFAULT_SCALE_VALUE;
+  },
+
+  touchPinchCallback(origin, prevDistance, distance) {
+    if (this.supportsPinchToZoom) {
+      const newScaleFactor = this._accumulateFactor(
+        this.pdfViewer.currentScale,
+        distance / prevDistance,
+        "_touchUnusedFactor"
+      );
+      this.updateZoom(null, newScaleFactor, origin);
+    } else {
+      const PIXELS_PER_LINE_SCALE = 30;
+      const ticks = this._accumulateTicks(
+        (distance - prevDistance) / PIXELS_PER_LINE_SCALE,
+        "_touchUnusedTicks"
+      );
+      this.updateZoom(ticks, null, origin);
+    }
+  },
+
+  touchPinchEndCallback() {
+    this._touchUnusedTicks = 0;
+    this._touchUnusedFactor = 1;
   },
 
   get pagesCount() {
@@ -884,6 +932,7 @@ const PDFViewerApplication = {
 
   moveCaret(isUp, select) {
     this._caretBrowsing ||= new CaretBrowsingMode(
+      this._globalAbortController.signal,
       this.appConfig.mainContainer,
       this.appConfig.viewerContainer,
       this.appConfig.toolbar?.container
@@ -900,18 +949,22 @@ const PDFViewerApplication = {
     }
     if (isDataScheme(url)) {
       this._hideViewBookmark();
+    } else if (
+      typeof PDFJSDev !== "undefined" &&
+      PDFJSDev.test("MOZCENTRAL || CHROME")
+    ) {
+      AppOptions.set("docBaseUrl", this.baseUrl);
     }
+
     let title = getPdfFilenameFromUrl(url, "");
     if (!title) {
       try {
-        title = decodeURIComponent(getFilenameFromUrl(url)) || url;
+        title = decodeURIComponent(getFilenameFromUrl(url));
       } catch {
-        // decodeURIComponent may throw URIError,
-        // fall back to using the unprocessed url in that case
-        title = url;
+        // decodeURIComponent may throw URIError.
       }
     }
-    this.setTitle(title);
+    this.setTitle(title || url); // Always fallback to the raw URL.
   },
 
   setTitle(title = this._title) {
@@ -992,7 +1045,6 @@ const PDFViewerApplication = {
     this.pdfLinkService.externalLinkEnabled = true;
     this.store = null;
     this.isInitialViewSet = false;
-    this.downloadComplete = false;
     this.url = "";
     this.baseUrl = "";
     this._downloadUrl = "";
@@ -1050,23 +1102,6 @@ const PDFViewerApplication = {
         /* downloadUrl = */ args.url
       );
     }
-    // Always set `docBaseUrl` in development mode, and in the (various)
-    // extension builds.
-    if (typeof PDFJSDev === "undefined") {
-      AppOptions.set("docBaseUrl", document.URL.split("#", 1)[0]);
-    } else if (PDFJSDev.test("MOZCENTRAL || CHROME")) {
-      AppOptions.set("docBaseUrl", this.baseUrl);
-    }
-
-    // On Android, there is almost no chance to have the font we want so we
-    // don't use the system fonts in this case.
-    if (
-      typeof PDFJSDev === "undefined"
-        ? window.isGECKOVIEW
-        : PDFJSDev.test("GECKOVIEW")
-    ) {
-      args.useSystemFonts = false;
-    }
 
     // Set the necessary API parameters, using all the available options.
     const apiParams = AppOptions.getAll(OptionKind.API);
@@ -1105,10 +1140,10 @@ const PDFViewerApplication = {
         let key = "pdfjs-loading-error";
         if (reason instanceof InvalidPDFException) {
           key = "pdfjs-invalid-file-error";
-        } else if (reason instanceof MissingPDFException) {
-          key = "pdfjs-missing-file-error";
-        } else if (reason instanceof UnexpectedResponseException) {
-          key = "pdfjs-unexpected-response-error";
+        } else if (reason instanceof ResponseException) {
+          key = reason.missing
+            ? "pdfjs-missing-file-error"
+            : "pdfjs-unexpected-response-error";
         }
         return this._documentError(key, { message: reason.message }).then(
           () => {
@@ -1129,26 +1164,28 @@ const PDFViewerApplication = {
     throw new Error("PDF document not downloaded.");
   },
 
+  /**
+   * @private
+   */
+  _ensureDownloadComplete() {
+    if (this.pdfDocument && this.downloadComplete) {
+      return;
+    }
+    throw new Error("PDF document not downloaded.");
+  },
+
   async download(options = {}) {
     let data;
     try {
-      if (this.downloadComplete) {
-        data = await this.pdfDocument.getData();
-      }
+      data = await this.pdfDocument.getData();
     } catch {
-      // When the PDF document isn't ready, or the PDF file is still
-      // downloading, simply download using the URL.
+      // When the PDF document isn't ready, simply download using the URL.
       //TODO: WISER: adjust for our usecase
     }
-    this.downloadManager.download(
-      data,
-      this._downloadUrl,
-      this._docFilename,
-      options
-    );
+    this.downloadManager.download(data, this._downloadUrl, this._docFilename);
   },
 
-  async save(options = {}) {
+  async save() {
     if (this._saveInProgress) {
       return;
     }
@@ -1157,16 +1194,11 @@ const PDFViewerApplication = {
 
     try {
       const data = await this.pdfDocument.saveDocument();
-      this.downloadManager.download(
-        data,
-        this._downloadUrl,
-        this._docFilename,
-        options
-      );
+      this.downloadManager.download(data, this._downloadUrl, this._docFilename);
     } catch (reason) {
       // When the PDF document isn't ready, fallback to a "regular" download.
-      console.error(`Error when saving the document: ${reason.message}`);
-      await this.download(options);
+      console.error(`Error when saving the document:`, reason);
+      await this.download();
     } finally {
       await this.pdfScriptingManager.dispatchDidSave();
       this._saveInProgress = false;
@@ -1183,7 +1215,7 @@ const PDFViewerApplication = {
     }
   },
 
-  async downloadOrSave(options = {}) {
+  async downloadOrSave() {
     // In the Firefox case, this method MUST always trigger a download.
     // When the user is closing a modified and unsaved document, we display a
     // prompt asking for saving or not. In case they save, we must wait for
@@ -1193,8 +1225,8 @@ const PDFViewerApplication = {
     const { classList } = this.appConfig.appContainer;
     classList.add("wait");
     await (this.pdfDocument?.annotationStorage.size > 0
-      ? this.save(options)
-      : this.download(options));
+      ? this.save()
+      : this.download());
     classList.remove("wait");
   },
 
@@ -1249,17 +1281,12 @@ const PDFViewerApplication = {
   },
 
   progress(level) {
-    if (!this.loadingBar || this.downloadComplete) {
-      // Don't accidentally show the loading bar again when the entire file has
-      // already been fetched (only an issue when disableAutoFetch is enabled).
-      return;
-    }
     const percent = Math.round(level * 100);
     // When we transition from full request to range requests, it's possible
     // that we discard some of the loaded data. This can cause the loading
     // bar to move backwards. So prevent this by only updating the bar if it
     // increases.
-    if (percent <= this.loadingBar.percent) {
+    if (!this.loadingBar || percent <= this.loadingBar.percent) {
       return;
     }
     this.loadingBar.percent = percent;
@@ -1282,7 +1309,6 @@ const PDFViewerApplication = {
 
     pdfDocument.getDownloadInfo().then(({ length }) => {
       this._contentLength = length; // Ensure that the correct length is used.
-      this.downloadComplete = true;
       this.loadingBar?.hide();
 
       firstPagePromise.then(() => {
@@ -1919,90 +1945,143 @@ const PDFViewerApplication = {
   },
 
   triggerPrinting() {
-    if (!this.supportsPrinting) {
-      return;
+    if (this.supportsPrinting) {
+      window.print();
     }
-    window.print();
   },
 
   bindEvents() {
     if (this._eventBusAbortController) {
       return;
     }
-    this._eventBusAbortController = new AbortController();
+    const ac = (this._eventBusAbortController = new AbortController());
+    const opts = { signal: ac.signal };
 
     const {
       eventBus,
-      _eventBusAbortController: { signal },
+      externalServices,
+      pdfDocumentProperties,
+      pdfViewer,
+      preferences,
     } = this;
 
-    eventBus._on("resize", webViewerResize, { signal });
-    eventBus._on("hashchange", webViewerHashchange, { signal });
-    eventBus._on("beforeprint", this.beforePrint.bind(this), { signal });
-    eventBus._on("afterprint", this.afterPrint.bind(this), { signal });
-    eventBus._on("pagerender", webViewerPageRender, { signal });
-    eventBus._on("pagerendered", webViewerPageRendered, { signal });
-    eventBus._on("updateviewarea", webViewerUpdateViewarea, { signal });
-    eventBus._on("pagechanging", webViewerPageChanging, { signal });
-    eventBus._on("scalechanging", webViewerScaleChanging, { signal });
-    eventBus._on("rotationchanging", webViewerRotationChanging, { signal });
-    eventBus._on("sidebarviewchanged", webViewerSidebarViewChanged, { signal });
-    eventBus._on("pagemode", webViewerPageMode, { signal });
-    eventBus._on("namedaction", webViewerNamedAction, { signal });
-    eventBus._on("presentationmodechanged", webViewerPresentationModeChanged, {
-      signal,
-    });
-    eventBus._on("presentationmode", webViewerPresentationMode, { signal });
+    eventBus._on("resize", onResize.bind(this), opts);
+    eventBus._on("hashchange", onHashchange.bind(this), opts);
+    eventBus._on("beforeprint", this.beforePrint.bind(this), opts);
+    eventBus._on("afterprint", this.afterPrint.bind(this), opts);
+    eventBus._on("pagerender", onPageRender.bind(this), opts);
+    eventBus._on("pagerendered", onPageRendered.bind(this), opts);
+    eventBus._on("updateviewarea", onUpdateViewarea.bind(this), opts);
+    eventBus._on("pagechanging", onPageChanging.bind(this), opts);
+    eventBus._on("scalechanging", onScaleChanging.bind(this), opts);
+    eventBus._on("rotationchanging", onRotationChanging.bind(this), opts);
+    eventBus._on("sidebarviewchanged", onSidebarViewChanged.bind(this), opts);
+    eventBus._on("pagemode", onPageMode.bind(this), opts);
+    eventBus._on("namedaction", onNamedAction.bind(this), opts);
+    eventBus._on(
+      "presentationmodechanged",
+      evt => (pdfViewer.presentationModeState = evt.state),
+      opts
+    );
+    eventBus._on(
+      "presentationmode",
+      this.requestPresentationMode.bind(this),
+      opts
+    );
     eventBus._on(
       "switchannotationeditormode",
-      webViewerSwitchAnnotationEditorMode,
-      { signal }
+      evt => (pdfViewer.annotationEditorMode = evt),
+      opts
+    );
+    eventBus._on("print", this.triggerPrinting.bind(this), opts);
+    eventBus._on("download", this.downloadOrSave.bind(this), opts);
+    eventBus._on("firstpage", () => (this.page = 1), opts);
+    eventBus._on("lastpage", () => (this.page = this.pagesCount), opts);
+    eventBus._on("nextpage", () => pdfViewer.nextPage(), opts);
+    eventBus._on("previouspage", () => pdfViewer.previousPage(), opts);
+    eventBus._on("zoomin", this.zoomIn.bind(this), opts);
+    eventBus._on("zoomout", this.zoomOut.bind(this), opts);
+    eventBus._on("zoomreset", this.zoomReset.bind(this), opts);
+    eventBus._on("pagenumberchanged", onPageNumberChanged.bind(this), opts);
+    eventBus._on(
+      "scalechanged",
+      evt => (pdfViewer.currentScaleValue = evt.value),
+      opts
+    );
+    eventBus._on("rotatecw", this.rotatePages.bind(this, 90), opts);
+    eventBus._on("rotateccw", this.rotatePages.bind(this, -90), opts);
+    eventBus._on(
+      "optionalcontentconfig",
+      evt => (pdfViewer.optionalContentConfigPromise = evt.promise),
+      opts
     );
     eventBus._on(
-      "switchannotationeditorparams",
-      webViewerSwitchAnnotationEditorParams,
-      { signal }
+      "switchscrollmode",
+      evt => (pdfViewer.scrollMode = evt.mode),
+      opts
     );
-    eventBus._on("print", webViewerPrint, { signal });
-    eventBus._on("download", webViewerDownload, { signal });
-    eventBus._on("firstpage", webViewerFirstPage, { signal });
-    eventBus._on("lastpage", webViewerLastPage, { signal });
-    eventBus._on("nextpage", webViewerNextPage, { signal });
-    eventBus._on("previouspage", webViewerPreviousPage, { signal });
-    eventBus._on("zoomin", webViewerZoomIn, { signal });
-    eventBus._on("zoomout", webViewerZoomOut, { signal });
-    eventBus._on("zoomreset", webViewerZoomReset, { signal });
-    eventBus._on("pagenumberchanged", webViewerPageNumberChanged, { signal });
-    eventBus._on("scalechanged", webViewerScaleChanged, { signal });
-    eventBus._on("rotatecw", webViewerRotateCw, { signal });
-    eventBus._on("rotateccw", webViewerRotateCcw, { signal });
-    eventBus._on("optionalcontentconfig", webViewerOptionalContentConfig, {
-      signal,
-    });
-    eventBus._on("switchscrollmode", webViewerSwitchScrollMode, { signal });
-    eventBus._on("scrollmodechanged", webViewerScrollModeChanged, { signal });
-    eventBus._on("switchspreadmode", webViewerSwitchSpreadMode, { signal });
-    eventBus._on("spreadmodechanged", webViewerSpreadModeChanged, { signal });
-    eventBus._on("documentproperties", webViewerDocumentProperties, { signal });
-    eventBus._on("findfromurlhash", webViewerFindFromUrlHash, { signal });
-    eventBus._on("updatefindmatchescount", webViewerUpdateFindMatchesCount, {
-      signal,
-    });
-    eventBus._on("updatefindcontrolstate", webViewerUpdateFindControlState, {
-      signal,
-    });
+    eventBus._on(
+      "scrollmodechanged",
+      onViewerModesChanged.bind(this, "scrollMode"),
+      opts
+    );
+    eventBus._on(
+      "switchspreadmode",
+      evt => (pdfViewer.spreadMode = evt.mode),
+      opts
+    );
+    eventBus._on(
+      "spreadmodechanged",
+      onViewerModesChanged.bind(this, "spreadMode"),
+      opts
+    );
+    eventBus._on(
+      "imagealttextsettings",
+      onImageAltTextSettings.bind(this),
+      opts
+    );
+    eventBus._on(
+      "documentproperties",
+      () => pdfDocumentProperties?.open(),
+      opts
+    );
+    eventBus._on("findfromurlhash", onFindFromUrlHash.bind(this), opts);
+    eventBus._on(
+      "updatefindmatchescount",
+      onUpdateFindMatchesCount.bind(this),
+      opts
+    );
+    eventBus._on(
+      "updatefindcontrolstate",
+      onUpdateFindControlState.bind(this),
+      opts
+    );
 
     if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-      eventBus._on("fileinputchange", webViewerFileInputChange, { signal });
-      eventBus._on("openfile", webViewerOpenFile, { signal });
+      eventBus._on("fileinputchange", onFileInputChange.bind(this), opts);
+      eventBus._on("openfile", onOpenFile.bind(this), opts);
     }
     if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
       eventBus._on(
         "annotationeditorstateschanged",
-        webViewerAnnotationEditorStatesChanged,
-        { signal }
+        evt => externalServices.updateEditorStates(evt),
+        opts
       );
-      eventBus._on("reporttelemetry", webViewerReportTelemetry, { signal });
+      eventBus._on(
+        "reporttelemetry",
+        evt => externalServices.reportTelemetry(evt.details),
+        opts
+      );
+    }
+    if (
+      typeof PDFJSDev === "undefined" ||
+      PDFJSDev.test("TESTING || MOZCENTRAL")
+    ) {
+      eventBus._on(
+        "setpreference",
+        evt => preferences.set(evt.name, evt.value),
+        opts
+      );
     }
   },
 
@@ -2015,12 +2094,27 @@ const PDFViewerApplication = {
     const {
       eventBus,
       appConfig: { mainContainer },
+      pdfViewer,
       _windowAbortController: { signal },
     } = this;
 
+    if (
+      (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) ||
+      typeof AbortSignal.any === "function"
+    ) {
+      this._touchManager = new TouchManager({
+        container: window,
+        isPinchingDisabled: () => pdfViewer.isInPresentationMode,
+        isPinchingStopped: () => this.overlayManager?.active,
+        onPinching: this.touchPinchCallback.bind(this),
+        onPinchEnd: this.touchPinchEndCallback.bind(this),
+        signal,
+      });
+    }
+
     function addWindowResolutionChange(evt = null) {
       if (evt) {
-        webViewerResolutionChange(evt);
+        pdfViewer.refresh();
       }
       const mediaQueryList = window.matchMedia(
         `(resolution: ${window.devicePixelRatio || 1}dppx)`
@@ -2032,33 +2126,16 @@ const PDFViewerApplication = {
     }
     addWindowResolutionChange();
 
-    window.addEventListener("visibilitychange", webViewerVisibilityChange, {
-      signal,
-    });
-    window.addEventListener("wheel", webViewerWheel, {
+    window.addEventListener("wheel", onWheel.bind(this), {
       passive: false,
       signal,
     });
-    window.addEventListener("touchstart", webViewerTouchStart, {
-      passive: false,
-      signal,
-    });
-    window.addEventListener("touchmove", webViewerTouchMove, {
-      passive: false,
-      signal,
-    });
-    window.addEventListener("touchend", webViewerTouchEnd, {
-      passive: false,
-      signal,
-    });
-    window.addEventListener("click", webViewerClick, { signal });
-    window.addEventListener("keydown", webViewerKeyDown, { signal });
-    window.addEventListener("keyup", webViewerKeyUp, { signal });
+    window.addEventListener("click", onClick.bind(this), { signal });
+    window.addEventListener("keydown", onKeyDown.bind(this), { signal });
+    window.addEventListener("keyup", onKeyUp.bind(this), { signal });
     window.addEventListener(
       "resize",
-      () => {
-        eventBus.dispatch("resize", { source: window });
-      },
+      () => eventBus.dispatch("resize", { source: window }),
       { signal }
     );
     window.addEventListener(
@@ -2073,24 +2150,20 @@ const PDFViewerApplication = {
     );
     window.addEventListener(
       "beforeprint",
-      () => {
-        eventBus.dispatch("beforeprint", { source: window });
-      },
+      () => eventBus.dispatch("beforeprint", { source: window }),
       { signal }
     );
     window.addEventListener(
       "afterprint",
-      () => {
-        eventBus.dispatch("afterprint", { source: window });
-      },
+      () => eventBus.dispatch("afterprint", { source: window }),
       { signal }
     );
     window.addEventListener(
       "updatefromsandbox",
-      event => {
+      evt => {
         eventBus.dispatch("updatefromsandbox", {
           source: window,
-          detail: event.detail,
+          detail: evt.detail,
         });
       },
       { signal }
@@ -2136,7 +2209,7 @@ const PDFViewerApplication = {
         return;
       }
 
-      mainContainer.removeEventListener("scroll", scroll, { passive: true });
+      mainContainer.removeEventListener("scroll", scroll);
       this._isScrolling = true;
       mainContainer.addEventListener("scrollend", scrollend, { signal });
       mainContainer.addEventListener("blur", scrollend, { signal });
@@ -2155,6 +2228,7 @@ const PDFViewerApplication = {
   unbindWindowEvents() {
     this._windowAbortController?.abort();
     this._windowAbortController = null;
+    this._touchManager = null;
   },
 
   /**
@@ -2258,29 +2332,45 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       throw ex;
     }
   };
+
+  // eslint-disable-next-line no-var
+  var onFileInputChange = function (evt) {
+    if (this.pdfViewer?.isInPresentationMode) {
+      return; // Opening a new PDF file isn't supported in Presentation Mode.
+    }
+    const file = evt.fileInput.files[0];
+
+    this.open({
+      url: URL.createObjectURL(file),
+      originalUrl: file.name,
+    });
+  };
+
+  // eslint-disable-next-line no-var
+  var onOpenFile = function (evt) {
+    this._openFileInput?.click();
+  };
 }
 
-function webViewerPageRender({ pageNumber }) {
+function onPageRender({ pageNumber }) {
   // If the page is (the most) visible when it starts rendering,
   // ensure that the page number input loading indicator is displayed.
-  if (pageNumber === PDFViewerApplication.page) {
-    PDFViewerApplication.toolbar?.updateLoadingIndicatorState(true);
+  if (pageNumber === this.page) {
+    this.toolbar?.updateLoadingIndicatorState(true);
   }
 }
 
-function webViewerPageRendered({ pageNumber, error }) {
+function onPageRendered({ pageNumber, error }) {
   // If the page is still visible when it has finished rendering,
   // ensure that the page number input loading indicator is hidden.
-  if (pageNumber === PDFViewerApplication.page) {
-    PDFViewerApplication.toolbar?.updateLoadingIndicatorState(false);
+  if (pageNumber === this.page) {
+    this.toolbar?.updateLoadingIndicatorState(false);
   }
 
   // Use the rendered page to set the corresponding thumbnail image.
-  if (PDFViewerApplication.pdfSidebar?.visibleView === SidebarView.THUMBS) {
-    const pageView = PDFViewerApplication.pdfViewer.getPageView(
-      /* index = */ pageNumber - 1
-    );
-    const thumbnailView = PDFViewerApplication.pdfThumbnailViewer?.getThumbnail(
+  if (this.pdfSidebar?.visibleView === SidebarView.THUMBS) {
+    const pageView = this.pdfViewer.getPageView(/* index = */ pageNumber - 1);
+    const thumbnailView = this.pdfThumbnailViewer?.getThumbnail(
       /* index = */ pageNumber - 1
     );
     if (pageView) {
@@ -2289,11 +2379,11 @@ function webViewerPageRendered({ pageNumber, error }) {
   }
 
   if (error) {
-    PDFViewerApplication._otherError("pdfjs-rendering-error", error);
+    this._otherError("pdfjs-rendering-error", error);
   }
 }
 
-function webViewerPageMode({ mode }) {
+function onPageMode({ mode }) {
   // Handle the 'pagemode' hash parameter, see also `PDFLinkService_setHash`.
   let view;
   switch (mode) {
@@ -2317,53 +2407,48 @@ function webViewerPageMode({ mode }) {
       console.error('Invalid "pagemode" hash parameter: ' + mode);
       return;
   }
-  PDFViewerApplication.pdfSidebar?.switchView(view, /* forceOpen = */ true);
+  this.pdfSidebar?.switchView(view, /* forceOpen = */ true);
 }
 
-function webViewerNamedAction(evt) {
+function onNamedAction(evt) {
   // Processing a couple of named actions that might be useful, see also
   // `PDFLinkService.executeNamedAction`.
   switch (evt.action) {
     case "GoToPage":
-      PDFViewerApplication.appConfig.toolbar?.pageNumber.select();
+      this.appConfig.toolbar?.pageNumber.select();
       break;
 
     case "Find":
-      if (!PDFViewerApplication.supportsIntegratedFind) {
-        PDFViewerApplication.findBar?.toggle();
+      if (!this.supportsIntegratedFind) {
+        this.findBar?.toggle();
       }
       break;
 
     case "Print":
-      PDFViewerApplication.triggerPrinting();
+      this.triggerPrinting();
       break;
 
     case "SaveAs":
-      PDFViewerApplication.downloadOrSave();
+      this.downloadOrSave();
       break;
   }
 }
 
-function webViewerPresentationModeChanged(evt) {
-  PDFViewerApplication.pdfViewer.presentationModeState = evt.state;
-}
+function onSidebarViewChanged({ view }) {
+  this.pdfRenderingQueue.isThumbnailViewEnabled = view === SidebarView.THUMBS;
 
-function webViewerSidebarViewChanged({ view }) {
-  PDFViewerApplication.pdfRenderingQueue.isThumbnailViewEnabled =
-    view === SidebarView.THUMBS;
-
-  if (PDFViewerApplication.isInitialViewSet) {
+  if (this.isInitialViewSet) {
     // Only update the storage when the document has been loaded *and* rendered.
-    PDFViewerApplication.store?.set("sidebarView", view).catch(() => {
+    this.store?.set("sidebarView", view).catch(() => {
       // Unable to write to storage.
     });
   }
 }
 
-function webViewerUpdateViewarea({ location }) {
-  if (PDFViewerApplication.isInitialViewSet) {
+function onUpdateViewarea({ location }) {
+  if (this.isInitialViewSet) {
     // Only update the storage when the document has been loaded *and* rendered.
-    PDFViewerApplication.store
+    this.store
       ?.setMultiple({
         page: location.pageNumber,
         zoom: location.scale,
@@ -2375,41 +2460,23 @@ function webViewerUpdateViewarea({ location }) {
         // Unable to write to storage.
       });
   }
-  if (PDFViewerApplication.appConfig.secondaryToolbar) {
-    const href = PDFViewerApplication.pdfLinkService.getAnchorUrl(
-      location.pdfOpenParams
-    );
-    PDFViewerApplication.appConfig.secondaryToolbar.viewBookmarkButton.href =
-      href;
+  if (this.appConfig.secondaryToolbar) {
+    this.appConfig.secondaryToolbar.viewBookmarkButton.href =
+      this.pdfLinkService.getAnchorUrl(location.pdfOpenParams);
   }
 }
 
-function webViewerScrollModeChanged(evt) {
-  if (
-    PDFViewerApplication.isInitialViewSet &&
-    !PDFViewerApplication.pdfViewer.isInPresentationMode
-  ) {
+function onViewerModesChanged(name, evt) {
+  if (this.isInitialViewSet && !this.pdfViewer.isInPresentationMode) {
     // Only update the storage when the document has been loaded *and* rendered.
-    PDFViewerApplication.store?.set("scrollMode", evt.mode).catch(() => {
+    this.store?.set(name, evt.mode).catch(() => {
       // Unable to write to storage.
     });
   }
 }
 
-function webViewerSpreadModeChanged(evt) {
-  if (
-    PDFViewerApplication.isInitialViewSet &&
-    !PDFViewerApplication.pdfViewer.isInPresentationMode
-  ) {
-    // Only update the storage when the document has been loaded *and* rendered.
-    PDFViewerApplication.store?.set("spreadMode", evt.mode).catch(() => {
-      // Unable to write to storage.
-    });
-  }
-}
-
-function webViewerResize() {
-  const { pdfDocument, pdfViewer, pdfRenderingQueue } = PDFViewerApplication;
+function onResize() {
+  const { pdfDocument, pdfViewer, pdfRenderingQueue } = this;
 
   if (pdfRenderingQueue.printing && window.matchMedia("print").matches) {
     // Work-around issue 15324 by ignoring "resize" events during printing.
@@ -2431,80 +2498,24 @@ function webViewerResize() {
   pdfViewer.update();
 }
 
-function webViewerHashchange(evt) {
+function onHashchange(evt) {
   const hash = evt.hash;
   if (!hash) {
     return;
   }
-  if (!PDFViewerApplication.isInitialViewSet) {
-    PDFViewerApplication.initialBookmark = hash;
-  } else if (!PDFViewerApplication.pdfHistory?.popStateInProgress) {
-    PDFViewerApplication.pdfLinkService.setHash(hash);
+  if (!this.isInitialViewSet) {
+    this.initialBookmark = hash;
+  } else if (!this.pdfHistory?.popStateInProgress) {
+    this.pdfLinkService.setHash(hash);
   }
 }
 
-if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
-  // eslint-disable-next-line no-var
-  var webViewerFileInputChange = function (evt) {
-    if (PDFViewerApplication.pdfViewer?.isInPresentationMode) {
-      return; // Opening a new PDF file isn't supported in Presentation Mode.
-    }
-    const file = evt.fileInput.files[0];
-
-    PDFViewerApplication.open({
-      url: URL.createObjectURL(file),
-      originalUrl: file.name,
-    });
-  };
-
-  // eslint-disable-next-line no-var
-  var webViewerOpenFile = function (evt) {
-    PDFViewerApplication._openFileInput?.click();
-  };
-}
-
-function webViewerPresentationMode() {
-  PDFViewerApplication.requestPresentationMode();
-}
-function webViewerSwitchAnnotationEditorMode(evt) {
-  PDFViewerApplication.pdfViewer.annotationEditorMode = evt;
-}
-function webViewerSwitchAnnotationEditorParams(evt) {
-  PDFViewerApplication.pdfViewer.annotationEditorParams = evt;
-}
-function webViewerPrint() {
-  PDFViewerApplication.triggerPrinting();
-}
-function webViewerDownload() {
-  PDFViewerApplication.downloadOrSave();
-}
-function webViewerFirstPage() {
-  PDFViewerApplication.page = 1;
-}
-function webViewerLastPage() {
-  PDFViewerApplication.page = PDFViewerApplication.pagesCount;
-}
-function webViewerNextPage() {
-  PDFViewerApplication.pdfViewer.nextPage();
-}
-function webViewerPreviousPage() {
-  PDFViewerApplication.pdfViewer.previousPage();
-}
-function webViewerZoomIn() {
-  PDFViewerApplication.zoomIn();
-}
-function webViewerZoomOut() {
-  PDFViewerApplication.zoomOut();
-}
-function webViewerZoomReset() {
-  PDFViewerApplication.zoomReset();
-}
-function webViewerPageNumberChanged(evt) {
-  const pdfViewer = PDFViewerApplication.pdfViewer;
+function onPageNumberChanged(evt) {
+  const { pdfViewer } = this;
   // Note that for `<input type="number">` HTML elements, an empty string will
   // be returned for non-number inputs; hence we simply do nothing in that case.
   if (evt.value !== "") {
-    PDFViewerApplication.pdfLinkService.goToPage(evt.value);
+    this.pdfLinkService.goToPage(evt.value);
   }
 
   // Ensure that the page number input displays the correct value, even if the
@@ -2513,36 +2524,24 @@ function webViewerPageNumberChanged(evt) {
     evt.value !== pdfViewer.currentPageNumber.toString() &&
     evt.value !== pdfViewer.currentPageLabel
   ) {
-    PDFViewerApplication.toolbar?.setPageNumber(
+    this.toolbar?.setPageNumber(
       pdfViewer.currentPageNumber,
       pdfViewer.currentPageLabel
     );
   }
 }
-function webViewerScaleChanged(evt) {
-  PDFViewerApplication.pdfViewer.currentScaleValue = evt.value;
-}
-function webViewerRotateCw() {
-  PDFViewerApplication.rotatePages(90);
-}
-function webViewerRotateCcw() {
-  PDFViewerApplication.rotatePages(-90);
-}
-function webViewerOptionalContentConfig(evt) {
-  PDFViewerApplication.pdfViewer.optionalContentConfigPromise = evt.promise;
-}
-function webViewerSwitchScrollMode(evt) {
-  PDFViewerApplication.pdfViewer.scrollMode = evt.mode;
-}
-function webViewerSwitchSpreadMode(evt) {
-  PDFViewerApplication.pdfViewer.spreadMode = evt.mode;
-}
-function webViewerDocumentProperties() {
-  PDFViewerApplication.pdfDocumentProperties?.open();
+
+function onImageAltTextSettings() {
+  this.imageAltTextSettings?.open({
+    enableGuessAltText: AppOptions.get("enableGuessAltText"),
+    enableNewAltTextWhenAddingImage: AppOptions.get(
+      "enableNewAltTextWhenAddingImage"
+    ),
+  });
 }
 
-function webViewerFindFromUrlHash(evt) {
-  PDFViewerApplication.eventBus.dispatch("find", {
+function onFindFromUrlHash(evt) {
+  this.eventBus.dispatch("find", {
     source: evt.source,
     type: "",
     query: evt.query,
@@ -2554,23 +2553,23 @@ function webViewerFindFromUrlHash(evt) {
   });
 }
 
-function webViewerUpdateFindMatchesCount({ matchesCount }) {
-  if (PDFViewerApplication.supportsIntegratedFind) {
-    PDFViewerApplication.externalServices.updateFindMatchesCount(matchesCount);
+function onUpdateFindMatchesCount({ matchesCount }) {
+  if (this.supportsIntegratedFind) {
+    this.externalServices.updateFindMatchesCount(matchesCount);
   } else {
-    PDFViewerApplication.findBar?.updateResultsCount(matchesCount);
+    this.findBar?.updateResultsCount(matchesCount);
   }
 }
 
-function webViewerUpdateFindControlState({
+function onUpdateFindControlState({
   state,
   previous,
   entireWord,
   matchesCount,
   rawQuery,
 }) {
-  if (PDFViewerApplication.supportsIntegratedFind) {
-    PDFViewerApplication.externalServices.updateFindControlState({
+  if (this.supportsIntegratedFind) {
+    this.externalServices.updateFindControlState({
       result: state,
       findPrevious: previous,
       entireWord,
@@ -2578,73 +2577,48 @@ function webViewerUpdateFindControlState({
       rawQuery,
     });
   } else {
-    PDFViewerApplication.findBar?.updateUIState(state, previous, matchesCount);
+    this.findBar?.updateUIState(state, previous, matchesCount);
   }
 }
 
-function webViewerScaleChanging(evt) {
-  PDFViewerApplication.toolbar?.setPageScale(evt.presetValue, evt.scale);
+function onScaleChanging(evt) {
+  this.toolbar?.setPageScale(evt.presetValue, evt.scale);
 
-  PDFViewerApplication.pdfViewer.update();
+  this.pdfViewer.update();
 }
 
-function webViewerRotationChanging(evt) {
-  if (PDFViewerApplication.pdfThumbnailViewer) {
-    PDFViewerApplication.pdfThumbnailViewer.pagesRotation = evt.pagesRotation;
+function onRotationChanging(evt) {
+  if (this.pdfThumbnailViewer) {
+    this.pdfThumbnailViewer.pagesRotation = evt.pagesRotation;
   }
 
-  PDFViewerApplication.forceRendering();
+  this.forceRendering();
   // Ensure that the active page doesn't change during rotation.
-  PDFViewerApplication.pdfViewer.currentPageNumber = evt.pageNumber;
+  this.pdfViewer.currentPageNumber = evt.pageNumber;
 }
 
-function webViewerPageChanging({ pageNumber, pageLabel }) {
-  PDFViewerApplication.toolbar?.setPageNumber(pageNumber, pageLabel);
-  PDFViewerApplication.secondaryToolbar?.setPageNumber(pageNumber);
+function onPageChanging({ pageNumber, pageLabel }) {
+  this.toolbar?.setPageNumber(pageNumber, pageLabel);
+  this.secondaryToolbar?.setPageNumber(pageNumber);
 
-  if (PDFViewerApplication.pdfSidebar?.visibleView === SidebarView.THUMBS) {
-    PDFViewerApplication.pdfThumbnailViewer?.scrollThumbnailIntoView(
-      pageNumber
-    );
+  if (this.pdfSidebar?.visibleView === SidebarView.THUMBS) {
+    this.pdfThumbnailViewer?.scrollThumbnailIntoView(pageNumber);
   }
 
   // Show/hide the loading indicator in the page number input element.
-  const currentPage = PDFViewerApplication.pdfViewer.getPageView(
-    /* index = */ pageNumber - 1
-  );
-  PDFViewerApplication.toolbar?.updateLoadingIndicatorState(
+  const currentPage = this.pdfViewer.getPageView(/* index = */ pageNumber - 1);
+  this.toolbar?.updateLoadingIndicatorState(
     currentPage?.renderingState === RenderingStates.RUNNING
   );
 }
 
-function webViewerResolutionChange(evt) {
-  PDFViewerApplication.pdfViewer.refresh();
-}
-
-function webViewerVisibilityChange(evt) {
-  if (document.visibilityState === "visible") {
-    // Ignore mouse wheel zooming during tab switches (bug 1503412).
-    setZoomDisabledTimeout();
-  }
-}
-
-let zoomDisabledTimeout = null;
-function setZoomDisabledTimeout() {
-  if (zoomDisabledTimeout) {
-    clearTimeout(zoomDisabledTimeout);
-  }
-  zoomDisabledTimeout = setTimeout(function () {
-    zoomDisabledTimeout = null;
-  }, WHEEL_ZOOM_DISABLED_TIMEOUT);
-}
-
-function webViewerWheel(evt) {
+function onWheel(evt) {
   const {
     pdfViewer,
     supportsMouseWheelZoomCtrlKey,
     supportsMouseWheelZoomMetaKey,
     supportsPinchToZoom,
-  } = PDFViewerApplication;
+  } = this;
 
   if (pdfViewer.isInPresentationMode) {
     return;
@@ -2673,7 +2647,7 @@ function webViewerWheel(evt) {
     FeatureTest.platform.isMac;
   const isPinchToZoom =
     evt.ctrlKey &&
-    !PDFViewerApplication._isCtrlKeyDown &&
+    !this._isCtrlKeyDown &&
     deltaMode === WheelEvent.DOM_DELTA_PIXEL &&
     evt.deltaX === 0 &&
     (Math.abs(scaleFactor - 1) < 0.05 || isBuiltInMac) &&
@@ -2689,21 +2663,20 @@ function webViewerWheel(evt) {
     evt.preventDefault();
     // NOTE: this check must be placed *after* preventDefault.
     if (
-      PDFViewerApplication._isScrolling ||
-      zoomDisabledTimeout ||
+      this._isScrolling ||
       document.visibilityState === "hidden" ||
-      PDFViewerApplication.overlayManager.active
+      this.overlayManager.active
     ) {
       return;
     }
 
     if (isPinchToZoom && supportsPinchToZoom) {
-      scaleFactor = PDFViewerApplication._accumulateFactor(
+      scaleFactor = this._accumulateFactor(
         pdfViewer.currentScale,
         scaleFactor,
         "_wheelUnusedFactor"
       );
-      PDFViewerApplication.updateZoom(null, scaleFactor, origin);
+      this.updateZoom(null, scaleFactor, origin);
     } else {
       const delta = normalizeWheelEventDirection(evt);
 
@@ -2716,185 +2689,86 @@ function webViewerWheel(evt) {
         // OSs have different defaults for the number lines. But we generally
         // want one "clicky" roll of the wheel (which produces one event) to
         // adjust the zoom by one step.
-        if (Math.abs(delta) >= 1) {
-          ticks = Math.sign(delta);
-        } else {
-          // If we're getting fractional lines (I can't think of a scenario
-          // this might actually happen), be safe and use the accumulator.
-          ticks = PDFViewerApplication._accumulateTicks(
-            delta,
-            "_wheelUnusedTicks"
-          );
-        }
+        //
+        // If we're getting fractional lines (I can't think of a scenario
+        // this might actually happen), be safe and use the accumulator.
+        ticks =
+          Math.abs(delta) >= 1
+            ? Math.sign(delta)
+            : this._accumulateTicks(delta, "_wheelUnusedTicks");
       } else {
         // pixel-based devices
         const PIXELS_PER_LINE_SCALE = 30;
-        ticks = PDFViewerApplication._accumulateTicks(
+        ticks = this._accumulateTicks(
           delta / PIXELS_PER_LINE_SCALE,
           "_wheelUnusedTicks"
         );
       }
 
-      PDFViewerApplication.updateZoom(ticks, null, origin);
+      this.updateZoom(ticks, null, origin);
     }
   }
 }
 
-function webViewerTouchStart(evt) {
+function closeSecondaryToolbar(evt) {
+  if (!this.secondaryToolbar?.isOpen) {
+    return;
+  }
+  const appConfig = this.appConfig;
   if (
-    PDFViewerApplication.pdfViewer.isInPresentationMode ||
-    evt.touches.length < 2
-  ) {
-    return;
-  }
-  evt.preventDefault();
-
-  if (evt.touches.length !== 2 || PDFViewerApplication.overlayManager.active) {
-    PDFViewerApplication._touchInfo = null;
-    return;
-  }
-
-  let [touch0, touch1] = evt.touches;
-  if (touch0.identifier > touch1.identifier) {
-    [touch0, touch1] = [touch1, touch0];
-  }
-  PDFViewerApplication._touchInfo = {
-    touch0X: touch0.pageX,
-    touch0Y: touch0.pageY,
-    touch1X: touch1.pageX,
-    touch1Y: touch1.pageY,
-  };
-}
-
-function webViewerTouchMove(evt) {
-  if (!PDFViewerApplication._touchInfo || evt.touches.length !== 2) {
-    return;
-  }
-
-  const { pdfViewer, _touchInfo, supportsPinchToZoom } = PDFViewerApplication;
-  let [touch0, touch1] = evt.touches;
-  if (touch0.identifier > touch1.identifier) {
-    [touch0, touch1] = [touch1, touch0];
-  }
-  const { pageX: page0X, pageY: page0Y } = touch0;
-  const { pageX: page1X, pageY: page1Y } = touch1;
-  const {
-    touch0X: pTouch0X,
-    touch0Y: pTouch0Y,
-    touch1X: pTouch1X,
-    touch1Y: pTouch1Y,
-  } = _touchInfo;
-
-  if (
-    Math.abs(pTouch0X - page0X) <= 1 &&
-    Math.abs(pTouch0Y - page0Y) <= 1 &&
-    Math.abs(pTouch1X - page1X) <= 1 &&
-    Math.abs(pTouch1Y - page1Y) <= 1
-  ) {
-    // Touches are really too close and it's hard do some basic
-    // geometry in order to guess something.
-    return;
-  }
-
-  _touchInfo.touch0X = page0X;
-  _touchInfo.touch0Y = page0Y;
-  _touchInfo.touch1X = page1X;
-  _touchInfo.touch1Y = page1Y;
-
-  if (pTouch0X === page0X && pTouch0Y === page0Y) {
-    // First touch is fixed, if the vectors are collinear then we've a pinch.
-    const v1X = pTouch1X - page0X;
-    const v1Y = pTouch1Y - page0Y;
-    const v2X = page1X - page0X;
-    const v2Y = page1Y - page0Y;
-    const det = v1X * v2Y - v1Y * v2X;
-    // 0.02 is approximatively sin(0.15deg).
-    if (Math.abs(det) > 0.02 * Math.hypot(v1X, v1Y) * Math.hypot(v2X, v2Y)) {
-      return;
-    }
-  } else if (pTouch1X === page1X && pTouch1Y === page1Y) {
-    // Second touch is fixed, if the vectors are collinear then we've a pinch.
-    const v1X = pTouch0X - page1X;
-    const v1Y = pTouch0Y - page1Y;
-    const v2X = page0X - page1X;
-    const v2Y = page0Y - page1Y;
-    const det = v1X * v2Y - v1Y * v2X;
-    if (Math.abs(det) > 0.02 * Math.hypot(v1X, v1Y) * Math.hypot(v2X, v2Y)) {
-      return;
-    }
-  } else {
-    const diff0X = page0X - pTouch0X;
-    const diff1X = page1X - pTouch1X;
-    const diff0Y = page0Y - pTouch0Y;
-    const diff1Y = page1Y - pTouch1Y;
-    const dotProduct = diff0X * diff1X + diff0Y * diff1Y;
-    if (dotProduct >= 0) {
-      // The two touches go in almost the same direction.
-      return;
-    }
-  }
-
-  evt.preventDefault();
-
-  const origin = [(page0X + page1X) / 2, (page0Y + page1Y) / 2];
-  const distance = Math.hypot(page0X - page1X, page0Y - page1Y) || 1;
-  const pDistance = Math.hypot(pTouch0X - pTouch1X, pTouch0Y - pTouch1Y) || 1;
-  if (supportsPinchToZoom) {
-    const newScaleFactor = PDFViewerApplication._accumulateFactor(
-      pdfViewer.currentScale,
-      distance / pDistance,
-      "_touchUnusedFactor"
-    );
-    PDFViewerApplication.updateZoom(null, newScaleFactor, origin);
-  } else {
-    const PIXELS_PER_LINE_SCALE = 30;
-    const ticks = PDFViewerApplication._accumulateTicks(
-      (distance - pDistance) / PIXELS_PER_LINE_SCALE,
-      "_touchUnusedTicks"
-    );
-    PDFViewerApplication.updateZoom(ticks, null, origin);
-  }
-}
-
-function webViewerTouchEnd(evt) {
-  if (!PDFViewerApplication._touchInfo) {
-    return;
-  }
-
-  evt.preventDefault();
-  PDFViewerApplication._touchInfo = null;
-  PDFViewerApplication._touchUnusedTicks = 0;
-  PDFViewerApplication._touchUnusedFactor = 1;
-}
-
-function webViewerClick(evt) {
-  if (!PDFViewerApplication.secondaryToolbar?.isOpen) {
-    return;
-  }
-  const appConfig = PDFViewerApplication.appConfig;
-  if (
-    PDFViewerApplication.pdfViewer.containsElement(evt.target) ||
+    this.pdfViewer.containsElement(evt.target) ||
     (appConfig.toolbar?.container.contains(evt.target) &&
-      evt.target !== appConfig.secondaryToolbar?.toggleButton)
+      // TODO: change the `contains` for an equality check when the bug:
+      //  https://bugzilla.mozilla.org/show_bug.cgi?id=1921984
+      // is fixed.
+      !appConfig.secondaryToolbar?.toggleButton.contains(evt.target))
   ) {
-    PDFViewerApplication.secondaryToolbar.close();
+    this.secondaryToolbar.close();
   }
 }
 
-function webViewerKeyUp(evt) {
+function closeEditorUndoBar(evt) {
+  if (!this.editorUndoBar?.isOpen) {
+    return;
+  }
+  if (this.appConfig.secondaryToolbar?.toolbar.contains(evt.target)) {
+    this.editorUndoBar.hide();
+  }
+}
+
+function onClick(evt) {
+  closeSecondaryToolbar.call(this, evt);
+  closeEditorUndoBar.call(this, evt);
+}
+
+function onKeyUp(evt) {
   // evt.ctrlKey is false hence we use evt.key.
   if (evt.key === "Control") {
-    PDFViewerApplication._isCtrlKeyDown = false;
+    this._isCtrlKeyDown = false;
   }
 }
 
-function webViewerKeyDown(evt) {
-  PDFViewerApplication._isCtrlKeyDown = evt.key === "Control";
+function onKeyDown(evt) {
+  this._isCtrlKeyDown = evt.key === "Control";
 
-  if (PDFViewerApplication.overlayManager.active) {
+  if (
+    this.editorUndoBar?.isOpen &&
+    evt.keyCode !== 9 &&
+    evt.keyCode !== 16 &&
+    !(
+      (evt.keyCode === 13 || evt.keyCode === 32) &&
+      getActiveOrFocusedElement() === this.appConfig.editorUndoBar.undoButton
+    )
+  ) {
+    // Hide undo bar on keypress except for Shift, Tab, Shift+Tab.
+    // Also avoid hiding if the undo button is triggered.
+    this.editorUndoBar.hide();
+  }
+
+  if (this.overlayManager.active) {
     return;
   }
-  const { eventBus, pdfViewer } = PDFViewerApplication;
+  const { eventBus, pdfViewer } = this;
   const isViewerInPresentationMode = pdfViewer.isInPresentationMode;
 
   let handled = false,
@@ -2911,14 +2785,14 @@ function webViewerKeyDown(evt) {
     // either CTRL or META key with optional SHIFT.
     switch (evt.keyCode) {
       case 70: // f
-        if (!PDFViewerApplication.supportsIntegratedFind && !evt.shiftKey) {
-          PDFViewerApplication.findBar?.open();
+        if (!this.supportsIntegratedFind && !evt.shiftKey) {
+          this.findBar?.open();
           handled = true;
         }
         break;
       case 71: // g
-        if (!PDFViewerApplication.supportsIntegratedFind) {
-          const { state } = PDFViewerApplication.findController;
+        if (!this.supportsIntegratedFind) {
+          const { state } = this.findController;
           if (state) {
             const newState = {
               source: window,
@@ -2934,40 +2808,37 @@ function webViewerKeyDown(evt) {
       case 107: // FF '+' and '='
       case 187: // Chrome '+'
       case 171: // FF with German keyboard
-        PDFViewerApplication.zoomIn();
+        this.zoomIn();
         handled = true;
         break;
       case 173: // FF/Mac '-'
       case 109: // FF '-'
       case 189: // Chrome '-'
-        PDFViewerApplication.zoomOut();
+        this.zoomOut();
         handled = true;
         break;
       case 48: // '0'
       case 96: // '0' on Numpad of Swedish keyboard
         if (!isViewerInPresentationMode) {
           // keeping it unhandled (to restore page zoom to 100%)
-          setTimeout(function () {
+          setTimeout(() => {
             // ... and resetting the scale after browser adjusts its scale
-            PDFViewerApplication.zoomReset();
+            this.zoomReset();
           });
           handled = false;
         }
         break;
 
       case 38: // up arrow
-        if (isViewerInPresentationMode || PDFViewerApplication.page > 1) {
-          PDFViewerApplication.page = 1;
+        if (isViewerInPresentationMode || this.page > 1) {
+          this.page = 1;
           handled = true;
           ensureViewerFocused = true;
         }
         break;
       case 40: // down arrow
-        if (
-          isViewerInPresentationMode ||
-          PDFViewerApplication.page < PDFViewerApplication.pagesCount
-        ) {
-          PDFViewerApplication.page = PDFViewerApplication.pagesCount;
+        if (isViewerInPresentationMode || this.page < this.pagesCount) {
+          this.page = this.pagesCount;
           handled = true;
           ensureViewerFocused = true;
         }
@@ -2998,17 +2869,17 @@ function webViewerKeyDown(evt) {
   if (cmd === 3 || cmd === 10) {
     switch (evt.keyCode) {
       case 80: // p
-        PDFViewerApplication.requestPresentationMode();
+        this.requestPresentationMode();
         handled = true;
-        PDFViewerApplication.externalServices.reportTelemetry({
+        this.externalServices.reportTelemetry({
           type: "buttons",
           data: { id: "presentationModeKeyboard" },
         });
         break;
       case 71: // g
         // focuses input#pageNumber field
-        if (PDFViewerApplication.appConfig.toolbar) {
-          PDFViewerApplication.appConfig.toolbar.pageNumber.select();
+        if (this.appConfig.toolbar) {
+          this.appConfig.toolbar.pageNumber.select();
           handled = true;
         }
         break;
@@ -3047,11 +2918,8 @@ function webViewerKeyDown(evt) {
       turnOnlyIfPageFit = false;
     switch (evt.keyCode) {
       case 38: // up arrow
-        if (PDFViewerApplication.supportsCaretBrowsingMode) {
-          PDFViewerApplication.moveCaret(
-            /* isUp = */ true,
-            /* select = */ false
-          );
+        if (this.supportsCaretBrowsingMode) {
+          this.moveCaret(/* isUp = */ true, /* select = */ false);
           handled = true;
           break;
         }
@@ -3070,7 +2938,7 @@ function webViewerKeyDown(evt) {
         turnPage = -1;
         break;
       case 37: // left arrow
-        if (PDFViewerApplication.supportsCaretBrowsingMode) {
+        if (this.supportsCaretBrowsingMode) {
           return;
         }
         // horizontal scrolling using arrow keys
@@ -3083,24 +2951,18 @@ function webViewerKeyDown(evt) {
         turnPage = -1;
         break;
       case 27: // esc key
-        if (PDFViewerApplication.secondaryToolbar?.isOpen) {
-          PDFViewerApplication.secondaryToolbar.close();
+        if (this.secondaryToolbar?.isOpen) {
+          this.secondaryToolbar.close();
           handled = true;
         }
-        if (
-          !PDFViewerApplication.supportsIntegratedFind &&
-          PDFViewerApplication.findBar?.opened
-        ) {
-          PDFViewerApplication.findBar.close();
+        if (!this.supportsIntegratedFind && this.findBar?.opened) {
+          this.findBar.close();
           handled = true;
         }
         break;
       case 40: // down arrow
-        if (PDFViewerApplication.supportsCaretBrowsingMode) {
-          PDFViewerApplication.moveCaret(
-            /* isUp = */ false,
-            /* select = */ false
-          );
+        if (this.supportsCaretBrowsingMode) {
+          this.moveCaret(/* isUp = */ false, /* select = */ false);
           handled = true;
           break;
         }
@@ -3120,7 +2982,7 @@ function webViewerKeyDown(evt) {
         turnPage = 1;
         break;
       case 39: // right arrow
-        if (PDFViewerApplication.supportsCaretBrowsingMode) {
+        if (this.supportsCaretBrowsingMode) {
           return;
         }
         // horizontal scrolling using arrow keys
@@ -3134,36 +2996,33 @@ function webViewerKeyDown(evt) {
         break;
 
       case 36: // home
-        if (isViewerInPresentationMode || PDFViewerApplication.page > 1) {
-          PDFViewerApplication.page = 1;
+        if (isViewerInPresentationMode || this.page > 1) {
+          this.page = 1;
           handled = true;
           ensureViewerFocused = true;
         }
         break;
       case 35: // end
-        if (
-          isViewerInPresentationMode ||
-          PDFViewerApplication.page < PDFViewerApplication.pagesCount
-        ) {
-          PDFViewerApplication.page = PDFViewerApplication.pagesCount;
+        if (isViewerInPresentationMode || this.page < this.pagesCount) {
+          this.page = this.pagesCount;
           handled = true;
           ensureViewerFocused = true;
         }
         break;
 
       case 83: // 's'
-        PDFViewerApplication.pdfCursorTools?.switchTool(CursorTool.SELECT);
+        this.pdfCursorTools?.switchTool(CursorTool.SELECT);
         break;
       case 72: // 'h'
-        PDFViewerApplication.pdfCursorTools?.switchTool(CursorTool.HAND);
+        this.pdfCursorTools?.switchTool(CursorTool.HAND);
         break;
 
       case 82: // 'r'
-        PDFViewerApplication.rotatePages(90);
+        this.rotatePages(90);
         break;
 
       case 115: // F4
-        PDFViewerApplication.pdfSidebar?.toggle();
+        this.pdfSidebar?.toggle();
         break;
     }
 
@@ -3197,15 +3056,15 @@ function webViewerKeyDown(evt) {
         break;
 
       case 38: // up arrow
-        PDFViewerApplication.moveCaret(/* isUp = */ true, /* select = */ true);
+        this.moveCaret(/* isUp = */ true, /* select = */ true);
         handled = true;
         break;
       case 40: // down arrow
-        PDFViewerApplication.moveCaret(/* isUp = */ false, /* select = */ true);
+        this.moveCaret(/* isUp = */ false, /* select = */ true);
         handled = true;
         break;
       case 82: // 'r'
-        PDFViewerApplication.rotatePages(-90);
+        this.rotatePages(-90);
         break;
     }
   }
@@ -3238,14 +3097,6 @@ function beforeUnload(evt) {
   evt.preventDefault();
   evt.returnValue = "";
   return false;
-}
-
-function webViewerAnnotationEditorStatesChanged(data) {
-  PDFViewerApplication.externalServices.updateEditorStates(data);
-}
-
-function webViewerReportTelemetry({ details }) {
-  PDFViewerApplication.externalServices.reportTelemetry(details);
 }
 
 export { PDFViewerApplication };
