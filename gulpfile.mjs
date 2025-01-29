@@ -49,6 +49,8 @@ import rimraf from "rimraf";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const HOST = "https://wiser-sp4.interactions.ics.unisg.ch"
+
 const BUILD_DIR = "build/";
 const L10N_DIR = "l10n/";
 const TEST_DIR = "test/";
@@ -147,11 +149,11 @@ function safeSpawnSync(command, parameters, options = {}) {
   if (result.status !== 0) {
     console.log(
       'Error: command "' +
-        command +
-        '" with parameters "' +
-        parameters +
-        '" exited with code ' +
-        result.status
+      command +
+      '" with parameters "' +
+      parameters +
+      '" exited with code ' +
+      result.status
     );
     process.exit(result.status);
   }
@@ -355,25 +357,25 @@ function createWebpackConfig(
       minimizer: !isMinified
         ? undefined
         : [
-            new TerserPlugin({
-              extractComments: false,
-              parallel: false,
-              minify: false,
-              terserOptions: {
-                compress: {
-                  // V8 chokes on very long sequences, work around that.
-                  sequences: false,
-                },
-                mangle: {
-                  // Ensure that the `tweakWebpackOutput` function works.
-                  reserved: ["__webpack_exports__"],
-                },
-                keep_classnames: true,
-                keep_fnames: true,
-                module: isModule,
+          new TerserPlugin({
+            extractComments: false,
+            parallel: false,
+            minify: false,
+            terserOptions: {
+              compress: {
+                // V8 chokes on very long sequences, work around that.
+                sequences: false,
               },
-            }),
-          ],
+              mangle: {
+                // Ensure that the `tweakWebpackOutput` function works.
+                reserved: ["__webpack_exports__"],
+              },
+              keep_classnames: true,
+              keep_fnames: true,
+              module: isModule,
+            },
+          }),
+        ],
     },
     experiments,
     output,
@@ -444,7 +446,7 @@ function checkChromePreferencesFile(chromePrefsPath, webPrefs) {
       ret = false;
       console.log(
         `Warning: not the same values (for "${key}"): ` +
-          `${chromePrefs.properties[key].default} !== ${value}`
+        `${chromePrefs.properties[key].default} !== ${value}`
       );
     }
   }
@@ -456,8 +458,8 @@ function checkChromePreferencesFile(chromePrefsPath, webPrefs) {
       ret = false;
       console.log(
         `Warning: ${chromePrefsPath} contains an unrecognized pref: ${key}. ` +
-          `Remove it, or prepend "DEPRECATED. " and add migration logic to ` +
-          `extensions/chromium/options/migration.js and web/chromecom.js.`
+        `Remove it, or prepend "DEPRECATED. " and add migration logic to ` +
+        `extensions/chromium/options/migration.js and web/chromecom.js.`
       );
     }
   }
@@ -821,6 +823,7 @@ function makeRef(done, bot) {
   });
 }
 
+
 gulp.task("default", function (done) {
   console.log("Available tasks:");
   const tasks = Object.keys(gulp.registry().tasks());
@@ -1107,63 +1110,64 @@ function buildGeneric(defines, dir) {
 
 // Individual tasks defined as asynchronous functions
 async function copyHTML() {
-    return gulp.src(['web/viewer_fragment.html', 'web/index.html'], { encoding: false })
-        .pipe(gulp.dest('../templates'));
+  return gulp.src(['web/viewer_fragment.html', 'web/index.html'], { encoding: false })
+    .pipe(gulp.dest('../templates'));
 }
 
 async function copyBuildJS(done) {
 
-    // Step 3: Copy all necessary files to the destination
-    return gulp.src(['build/generic/build/pdf.mjs', 'build/generic/build/pdf.worker.mjs', 'build/generic/build/pdf.sandbox.mjs'])
-        .pipe(gulp.dest('../pdf_api/js'));
+  // Step 3: Copy all necessary files to the destination
+  return gulp.src(['build/generic/build/pdf.mjs', 'build/generic/build/pdf.worker.mjs', 'build/generic/build/pdf.sandbox.mjs'])
+    .pipe(gulp.dest('../pdf_api/js'));
 }
 
 async function copyViewerJS() {
-    return gulp.src(['build/generic/web/viewer.mjs'])
-        .pipe(gulp.dest('../pdf_api/js'));
+  return gulp.src(['build/generic/web/viewer.mjs', 'build/generic/web/viewer.mjs.map'])
+    .pipe(replace('process.env.HOST', JSON.stringify(HOST)))
+    .pipe(gulp.dest('../pdf_api'));
 }
 
 async function copyCSS() {
-    return gulp.src(['build/generic/web/viewer.css'])
-        .pipe(gulp.dest('../pdf_api/css'));
+  return gulp.src(['build/generic/web/viewer.css'])
+    .pipe(gulp.dest('../pdf_api/css'));
 }
 
 async function copyCMaps() {
-    return gulp.src(['build/generic/web/cmaps/**/*'])
-        .pipe(gulp.dest('../pdf_api/cmaps'));
+  return gulp.src(['build/generic/web/cmaps/**/*'])
+    .pipe(gulp.dest('../pdf_api/cmaps'));
 }
 
 async function copyImages() {
-    return gulp.src(['build/generic/web/images/**/*'])
-        .pipe(gulp.dest('../pdf_api/css/images'));
+  return gulp.src(['build/generic/web/images/**/*'])
+    .pipe(gulp.dest('../pdf_api/css/images'));
 }
 
 async function copyStandardFonts() {
-    return gulp.src(['build/generic/web/standard_fonts/**/*'])
-        .pipe(gulp.dest('../pdf_api/standard_fonts'));
+  return gulp.src(['build/generic/web/standard_fonts/**/*'])
+    .pipe(gulp.dest('../pdf_api/standard_fonts'));
 }
 
 async function copyLocals() {
-    return gulp.src(['build/generic/web/locale/**/*'])
-        .pipe(gulp.dest('../pdf_api/locale'));
+  return gulp.src(['build/generic/web/locale/**/*'])
+    .pipe(gulp.dest('../pdf_api/locale'));
 }
 
 async function copyPDF() {
-    return gulp.src(['web/compressed.tracemonkey-pldi-09.pdf'])
-        .pipe(gulp.dest('../public/pdf'));
+  return gulp.src(['web/compressed.tracemonkey-pldi-09.pdf'])
+    .pipe(gulp.dest('../public/pdf'));
 }
 
 // Define a public task that runs both tasks sequentially using async/await
 gulp.task('copy-html-files', async function () {
-    await copyHTML();
-    await copyBuildJS();
-    await copyViewerJS();
-    await copyCSS();
-    await copyLocals();
-    await copyCMaps();
-    await copyImages();
-    await copyStandardFonts();
-    await copyPDF();
+  await copyHTML();
+  await copyBuildJS();
+  await copyViewerJS();
+  await copyCSS();
+  await copyLocals();
+  await copyCMaps();
+  await copyImages();
+  await copyStandardFonts();
+  await copyPDF();
 });
 
 
@@ -1195,30 +1199,32 @@ gulp.task(
 );
 
 gulp.task(
-    "wiser",
-    gulp.series(
-        createBuildNumber,
-        "locale",
-        function scriptingGeneric() {
-            const defines = {...DEFINES, GENERIC: true};
-            return ordered([
-                buildDefaultPreferences(defines, "generic/"),
-                createTemporaryScriptingBundle(defines),
-            ]);
-        },
-        async function prefsGeneric() {
-            await parseDefaultPreferences("generic/");
-        },
-        function createGeneric() {
-            console.log();
-            console.log("### Creating generic wiser viewer");
-            const defines = {...DEFINES, GENERIC: true};
+  "wiser",
+  gulp.series(
+    createBuildNumber,
+    "locale",
+    function scriptingGeneric() {
+      const defines = { ...DEFINES, GENERIC: true };
+      return ordered([
+        buildDefaultPreferences(defines, "generic/"),
+        createTemporaryScriptingBundle(defines),
+      ]);
+    },
+    async function prefsGeneric() {
+      await parseDefaultPreferences("generic/");
+    },
+    function createGeneric() {
+      console.log();
+      console.log("### Creating generic wiser viewer");
+      const defines = { ...DEFINES, GENERIC: true };
 
-            return buildGeneric(defines, GENERIC_DIR);
-        },
-        "copy-html-files"
-    )
+      return buildGeneric(defines, GENERIC_DIR);
+    },
+    "copy-html-files"
+  )
 );
+
+
 
 // Builds the generic production viewer that should be compatible with most
 // older HTML5 browsers.
@@ -1674,11 +1680,11 @@ function buildLibHelper(bundleDefines, inputStream, outputDir) {
       presets: skipBabel
         ? undefined
         : [
-            [
-              "@babel/preset-env",
-              { ...BABEL_PRESET_ENV_OPTS, loose: false, modules: false },
-            ],
+          [
+            "@babel/preset-env",
+            { ...BABEL_PRESET_ENV_OPTS, loose: false, modules: false },
           ],
+        ],
       plugins: [[babelPluginPDFJSPreprocessor, ctx]],
       targets: BABEL_TARGETS,
     }).code;
@@ -2606,8 +2612,8 @@ gulp.task(
             .on("end", function () {
               console.log(
                 "Result diff can be found at " +
-                  BUILD_DIR +
-                  MOZCENTRAL_DIFF_FILE
+                BUILD_DIR +
+                MOZCENTRAL_DIFF_FILE
               );
               done();
             });
